@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CRM</title>
+<meta name="description" content="Sean's outreach CRM: who to call and email today, warm leads and how each strategy is doing.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CRM">
+<meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15181f" media="(prefers-color-scheme: dark)">
+<style>
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: custom (the project's own)
+ * paper: oklch(98.6% 0.004 85) · accent: oklch(48% 0.15 255) · display: system sans · body: system sans
+ * nav: top bar, four tabs and one action · signature: the call list with its what-happened log · states: loading, empty, error, full
+ * axes: warm paper/system/ink blue · posture: restrained · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P3 H- E3 S3 R3 V4 · weakest: S, colour was spent on every number and pill; now colour marks only warm, paid and overdue, numbers and funnel share one panel, strategies a table */
+/* Impeccable polish 10/29: mode operate · one summary panel · dates as text, overdue as the only date pill · no icons on section heads · themed scrollbars, caret, placeholder */
+/* answered F7: inputs and buttons share one recipe on purpose, an input matches the button beside it (craft § 9) */
+:root {
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --text-xs: 12px; --text-sm: 13px; --text-md: 15px; --text-lg: 17px; --text-xl: 20px; --text-2xl: 28px;
+  --bg: oklch(98.6% 0.004 85); --panel: oklch(99.8% 0.003 85); --ink: oklch(23% 0.015 260); --muted: oklch(47% 0.015 260);
+  --line: oklch(90.5% 0.006 85); --soft: oklch(95.6% 0.006 85);
+  --accent: oklch(48% 0.15 255); --accent-ink: oklch(99% 0.005 255); --accent-bg: oklch(95% 0.03 255);
+  --warn: oklch(52% 0.12 70); --warn-bg: oklch(95% 0.05 85); --ok: oklch(47% 0.11 160); --ok-bg: oklch(94.5% 0.04 160);
+  --hot: oklch(54% 0.15 45); --hot-bg: oklch(95% 0.04 60); --dead: oklch(50% 0.17 27); --dead-bg: oklch(95.5% 0.03 25);
+  --closed: oklch(55% 0.012 260); --focus: oklch(55% 0.17 255); --ai: oklch(50% 0.13 300); --ai-bg: oklch(95% 0.03 300); --st-other: oklch(52% 0.15 350);
+  --scrim: oklch(15% 0.01 260 / 0.35); --shadow: 0 1px 2px oklch(15% 0.01 260 / 0.08); --shadow-lg: -8px 0 32px oklch(15% 0.01 260 / 0.18);
+  --ease: 150ms ease; --container: 1200px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(18% 0.012 260); --panel: oklch(22% 0.014 260); --ink: oklch(93% 0.006 85); --muted: oklch(72% 0.012 260);
+    --line: oklch(31% 0.014 260); --soft: oklch(26% 0.014 260);
+    --accent: oklch(74% 0.12 255); --accent-ink: oklch(18% 0.012 260); --accent-bg: oklch(30% 0.06 255);
+    --warn: oklch(82% 0.12 85); --warn-bg: oklch(31% 0.05 85); --ok: oklch(78% 0.12 160); --ok-bg: oklch(30% 0.05 160);
+    --hot: oklch(78% 0.13 55); --hot-bg: oklch(31% 0.06 50); --dead: oklch(74% 0.14 25); --dead-bg: oklch(30% 0.06 25);
+    --closed: oklch(66% 0.012 260); --focus: oklch(76% 0.13 255); --ai: oklch(78% 0.11 300); --ai-bg: oklch(30% 0.06 300); --st-other: oklch(76% 0.12 350);
+    --scrim: oklch(5% 0.01 260 / 0.55); --shadow: 0 1px 2px oklch(5% 0.01 260 / 0.4); --shadow-lg: -8px 0 32px oklch(5% 0.01 260 / 0.5);
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased;
+  font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; }
+::selection { background: var(--accent-bg); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+html { scrollbar-color: var(--line) transparent; accent-color: var(--accent); caret-color: var(--accent); }
+::placeholder { color: var(--muted); opacity: 1; }
+button, .btn, .card, .ov-row, .tab, .chip, .fstage, nav button, select, input, textarea { transition: background-color var(--ease), border-color var(--ease), color var(--ease); }
+@media (prefers-reduced-motion: reduce) { *, .drawer, .toast { transition: none !important; } }
+button, input, select, textarea { font: inherit; color: inherit; }
+button:disabled, .btn:disabled, select:disabled, input:disabled { opacity: 0.55; cursor: not-allowed; }
+a { color: var(--accent); text-underline-offset: 0.16em; }
+h1, h2, h3 { font-family: var(--font-display); overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+.i { width: 16px; height: 16px; vertical-align: -3px; flex: none; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  padding: 12px max(20px, calc((100% - var(--container)) / 2 + 20px)); padding-top: max(12px, env(safe-area-inset-top));
+  display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
+select.ws { border: 0; background: transparent; font-weight: 650; font-size: var(--text-lg); padding: 0; cursor: pointer; }
+nav { flex: none; display: flex; gap: 4px; background: var(--soft); border-radius: 8px; padding: 4px; overflow-x: auto; }
+nav button { border: 0; background: transparent; padding: 4px 12px; min-height: 32px; border-radius: 4px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+nav button:hover { color: var(--ink); }
+nav button.on { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+.grow { flex: 1; }
+input.search { flex: 0 1 280px; min-width: 140px; min-height: 36px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--panel);
+  min-height: 36px; padding: 4px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: 500; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--dead); }
+.btn.sm { min-height: 32px; padding: 0 12px; font-size: var(--text-sm); }
+.link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: var(--text-sm); }
+.link:hover { text-decoration: underline; }
+main { padding: 20px; max-width: var(--container); margin-inline: auto; }
+.head { display: flex; align-items: baseline; gap: 8px; margin: 24px 0 8px; }
+h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+.head h2 { margin: 0; font-size: var(--text-xl); font-weight: 650; }
+.head .n { color: var(--muted); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); padding: 12px 0; }
+.empty .btn { margin-left: 8px; }
+.muted { color: var(--muted); }
+.co { color: var(--muted); margin-left: 8px; }
+.pill { font-size: var(--text-xs); padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.pill.late { background: var(--warn-bg); color: var(--warn); }
+.pill.hot { background: var(--hot-bg); color: var(--hot); }
+.pill.blue { background: var(--soft); color: var(--ink); }
+.date { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.date.today { color: var(--ink); }
+.pill.paid { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.pill.dead { background: var(--dead-bg); color: var(--dead); }
+/* overview */
+.section { margin-top: 40px; }
+.section > .head:first-child { margin-top: 0; }
+.summary { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: clip; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px 24px; padding: 16px 20px; }
+.kpi { min-width: 0; }
+.kpi b { display: block; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kpi span { color: var(--muted); font-size: var(--text-sm); }
+.kpi.warm.has b { color: var(--hot); } .kpi.paid.has b { color: var(--ok); }
+.funnel { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); border-top: 1px solid var(--line); overflow-x: auto; }
+.fstage { border: 0; border-left: 1px solid var(--line); background: transparent; padding: 12px 20px; cursor: pointer; text-align: left; }
+.fstage:first-child { border-left: 0; }
+.fstage:hover { background: var(--soft); }
+.fstage:active { transform: translateY(1px); }
+.fstage b { display: block; font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
+.fstage span { font-size: var(--text-sm); color: var(--muted); }
+.fstage .tag { color: var(--ok); font-weight: 600; margin-left: 4px; }
+.stable td.num, .stable th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stable tr[data-strat] { cursor: pointer; } .stable tr[data-strat]:hover td { background: var(--soft); }
+.stable td { vertical-align: middle; }
+.strats { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.scard { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.scard .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.scard .top b { font-size: var(--text-lg); font-weight: 600; }
+.scard .rate { font-size: var(--text-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar { height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; margin: 8px 0 12px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.scard dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: var(--text-sm); margin: 0; }
+.scard dt { color: var(--muted); } .scard dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.rows { border-top: 1px solid var(--line); }
+.sbox { text-align: left; cursor: pointer; font: inherit; color: var(--ink); width: 100%; }
+.sbox:hover { border-color: var(--accent); }
+.sbox:active { transform: translateY(1px); }
+.sbox .desc { margin: 4px 0 0; font-size: var(--text-sm); }
+.sbox .sname { font-size: var(--text-lg); font-weight: 600; display: block; }
+.sbox .steps-n { font-size: var(--text-xs); }
+.sbox dl { margin-top: 12px; }
+.newcard { display: flex; align-items: center; justify-content: center; min-height: 160px; border-style: dashed; color: var(--accent); font-weight: 600; }
+.lede { margin: 4px 0 16px; max-width: 65ch; }
+.note { font-size: var(--text-xs); margin: 8px 0 0; }
+.seq { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.seq li { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.seq .day { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.seq .what { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.seq .what .muted { font-size: var(--text-sm); }
+.seq .counts { display: flex; gap: 16px; font-size: var(--text-sm); color: var(--muted); }
+.seq .counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.cold { color: var(--warn); font-weight: 600; }
+.filtered { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--ink); font-size: var(--text-sm); }
+.strip { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: baseline; padding: 4px 0 4px; }
+.strip div { display: flex; gap: 8px; align-items: baseline; }
+.strip b { font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
+.strip span { color: var(--muted); font-size: var(--text-sm); }
+.strip .hotn.has b { color: var(--hot); } .strip .paidn.has b { color: var(--ok); }
+.ai { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ai); flex: none; }
+.ai .i { width: 14px; height: 14px; }
+.ai.batch { background: var(--ai-bg); }
+.tdwho { display: inline-flex; gap: 4px; align-items: center; }
+.tdstage { display: flex; flex-direction: column; gap: 4px; }
+.stgd { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.card .dots { margin-top: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--text-xs); color: var(--muted); align-items: center; }
+.legend > span { display: inline-flex; gap: 4px; align-items: center; }
+.who { display: flex; gap: 8px; align-items: center; min-width: 0; cursor: pointer; }
+.who .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who:hover b { color: var(--accent); }
+.warm { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: clip; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { flex: 1; min-width: 132px; border: 0; background: transparent; padding: 12px 16px; text-align: left; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab:hover { background: var(--soft); }
+.tab b { display: block; font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
+.tab span { font-size: var(--text-sm); color: var(--muted); }
+.tab[aria-selected="true"] { border-bottom-color: var(--accent); }
+.tab[aria-selected="true"] span { color: var(--ink); }
+.tabpanel { padding: 4px 16px 12px; }
+.tabpanel .hint { font-size: var(--text-xs); color: var(--muted); margin: 8px 0 4px; }
+.wrow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, auto); gap: 4px 12px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.tabpanel .wrow:last-child { border-bottom: 0; }
+.wrow, .log-list li[data-id], .nowtop { cursor: pointer; }
+.wrow:hover, .log-list li[data-id]:hover { background: var(--soft); }
+.wnext { justify-self: end; min-width: 0; }
+.nxo { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 340px; }
+.nxo > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wmeta { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; padding-left: 28px; color: var(--muted); }
+.wmeta .ask { color: var(--ink); }
+.tag { display: inline-flex; gap: 4px; align-items: center; font-size: var(--text-sm); padding: 2px 8px; min-height: 28px; border: 0; border-radius: 6px; background: var(--soft);
+  color: var(--ink); cursor: pointer; max-width: 100%; }
+.tag > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag:hover { background: var(--line); }
+.tag .i { width: 14px; height: 14px; color: var(--muted); }
+.tagn { color: var(--accent); font-weight: 600; margin-left: 4px; white-space: nowrap; }
+.place { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: var(--text-sm); }
+.place .i { width: 14px; height: 14px; }
+.progress { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: var(--text-sm); }
+.track { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: clip; }
+.track i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 200ms ease; }
+.session { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.session > div { min-width: 0; }
+.now { border: 2px solid var(--accent); border-radius: 12px; background: var(--panel); padding: 20px; }
+.now h3 { font-size: var(--text-xl); font-weight: 650; display: flex; gap: 8px; align-items: center; margin: 0; }
+.now .nmlink, .log-list .nmlink { font-size: inherit; color: var(--ink); font-weight: inherit; text-align: left; }
+.log-list .nmlink { font-weight: 600; justify-self: start; }
+.now .sub { color: var(--muted); font-size: var(--text-sm); margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.now .big { font-size: var(--text-2xl); font-weight: 650; text-decoration: none; display: inline-flex; gap: 12px; align-items: center; min-height: 48px; margin-top: 12px; }
+.now .big .i { width: 24px; height: 24px; }
+.points { font-size: var(--text-sm); white-space: pre-wrap; background: var(--soft); border-radius: 8px; padding: 12px; margin: 12px 0 16px; max-height: 200px; overflow: auto; }
+input.callnote { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.go { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.go .muted { font-size: var(--text-sm); }
+.chip.warmc[aria-pressed="true"] { background: var(--hot-bg); border-color: var(--hot); }
+.side h3 { font-size: var(--text-md); font-weight: 600; margin: 0 0 8px; }
+.next-list { list-style: none; margin: 0 0 24px; padding: 0; border-top: 1px solid var(--line); }
+.next-list li { display: flex; gap: 8px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: var(--text-sm); min-width: 0; cursor: pointer; }
+.next-list li:hover { background: var(--soft); }
+.next-list li .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-list { list-style: none; margin: 0; padding: 0 8px 0 0; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
+.log-list:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.log-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: var(--text-sm); }
+.log-list .lacts { display: flex; gap: 12px; }
+.log-list .o { grid-column: 1; color: var(--muted); font-size: var(--text-xs); }
+.log-list .warmo { color: var(--hot); font-weight: 600; }
+.more-btn { display: flex; width: 100%; margin-top: 8px; }
+.ov-row { display: grid; grid-template-columns: minmax(0, 1.5fr) 132px 72px minmax(0, 1.6fr) 108px; gap: 12px; align-items: center;
+  padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: var(--text-sm); }
+.ov-row:hover { background: var(--soft); }
+.ov-row .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-row .who b { font-weight: 600; }
+.ov-row .nx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
+.ov-row .nx span { overflow: hidden; text-overflow: ellipsis; }
+.ov-row .due { justify-self: end; }
+.dots { display: inline-flex; gap: 2px; align-items: center; flex: none; }
+.dots i { --dot: var(--st-other); width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--dot); display: block; flex: none; }
+.dots i.email { --dot: var(--accent); } .dots i.call { --dot: var(--ok); } .dots i.close { --dot: var(--closed); }
+.dots i.f { background: var(--dot); }
+.dots i.at { width: 11px; height: 11px; background: var(--dot); }
+.dots i.s { background: var(--dot); border-color: transparent; opacity: 0.3; }
+.dots i.p { border-style: dashed; }
+.dots.dead i { border-color: var(--line); background: var(--soft); }
+.dots.dead i.end { width: 9px; height: 9px; background: var(--dead); border-color: var(--dead); }
+details.fold summary { cursor: pointer; color: var(--muted); margin: 24px 0 8px; font-size: var(--text-sm); }
+.skeleton { display: grid; gap: 12px; margin-top: 8px; }
+.skeleton i { display: block; height: 40px; border-radius: 8px; background: var(--soft); }
+/* filters, table, board */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 12px; }
+.filters select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; }
+.filters select.set { border-color: var(--accent); color: var(--accent); }
+.filters .count { color: var(--muted); font-size: var(--text-sm); }
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: var(--text-xs); color: var(--muted); font-weight: 600; white-space: nowrap; }
+tbody tr[data-id] { cursor: pointer; } tbody tr[data-id]:hover td { background: var(--soft); }
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover { color: var(--ink); }
+th .arrow { color: var(--accent); }
+.board { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.col { flex: 0 0 248px; max-height: calc(100vh - 200px); overflow-y: auto; }
+.colhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 4px 0 8px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+.colhead h3 { font-size: var(--text-sm); margin: 0; font-weight: 600; }
+.colhead .n { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.col.closed .colhead h3 { color: var(--closed); }
+.card { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; font-size: var(--text-sm); }
+.card:hover { border-color: var(--accent); }
+.card .top { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.card .who { font-weight: 600; }
+.card .step { margin-top: 4px; display: flex; gap: 4px; align-items: center; color: var(--muted); }
+/* strategies */
+.strat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.strat .name { font-size: var(--text-lg); font-weight: 600; border: 0; border-bottom: 1px solid transparent; padding: 4px 0; width: 100%; background: transparent; }
+.strat .name:focus-visible, .strat .desc:focus-visible { outline: none; border-bottom-color: var(--accent); }
+.strat .desc { border: 0; border-bottom: 1px solid transparent; width: 100%; background: transparent; color: var(--muted); padding: 4px 0; }
+.srow { display: grid; grid-template-columns: 132px 72px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.srow input, .srow select, .srow textarea { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.srow .more { display: grid; gap: 8px; }
+.srow textarea { min-height: 56px; }
+/* drawer */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: none; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 100%; max-width: 560px; background: var(--panel); z-index: 11;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; transform: translateX(105%); transition: transform 180ms ease; }
+.drawer.open { transform: none; } .scrim.open { display: block; }
+.dhead { flex: none; display: flex; align-items: center; gap: 12px; padding: 16px 24px 8px; padding-top: max(16px, env(safe-area-inset-top)); }
+.dbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 24px 40px; padding-bottom: max(40px, env(safe-area-inset-bottom)); }
+.drawer h2.name { font-size: var(--text-xl); color: var(--ink); margin: 0; flex: 1; min-width: 0; }
+.drawer h2.name:focus { outline: none; }
+.drawer h2.name:focus-visible { outline: 2px solid var(--focus); }
+.drawer .sub { color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.drawer .sub .link { min-height: 32px; }
+.status { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 12px 0 4px; font-size: var(--text-sm); }
+.timeline.recent { margin: 8px 0 12px; }
+.facts { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 12px; font-size: var(--text-sm); margin: 12px 0 0; }
+.facts dt { color: var(--muted); } .facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts a { display: inline-block; padding: 2px 0; }
+.pre { white-space: pre-wrap; }
+.box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 12px; }
+.acbox { display: grid; gap: 4px; max-width: 72ch; } .acbox textarea { margin-bottom: 8px; } .acbox input { margin-bottom: 8px; }
+label, .lbl { display: block; font-size: var(--text-xs); color: var(--muted); margin: 8px 0 4px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.box input, .box select, .box textarea, .stp input, .stp select, .stp textarea, .dbody > textarea { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+textarea { min-height: 112px; max-height: 50vh; resize: vertical; line-height: 1.45; padding-block: 8px !important; field-sizing: content; }
+textarea.short { min-height: 72px; }
+.row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.logrow { margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; }
+.drawer select.pick { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.drawer select.pick.auto { width: auto; }
+.drawer h3.sh { font-size: var(--text-md); font-weight: 600; margin: 24px 0 0; }
+.stp { border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; }
+.stp .h { display: flex; gap: 8px; align-items: center; width: 100%; padding: 8px 12px; min-height: 44px; border: 0; border-radius: 11px;
+  background: transparent; color: inherit; text-align: left; cursor: pointer; font-size: var(--text-sm); }
+.stp .h:hover { background: var(--soft); }
+.stp .h .t { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stp.cur { border: 2px solid var(--accent); }
+.stp.cur .h .i { color: var(--accent); }
+.stp .b { padding: 0 12px 12px; }
+.stp .b > label:first-child, .stp .b > .to:first-child { margin-top: 0; }
+.stp .phone { font-size: var(--text-xl); font-weight: 600; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; min-height: 44px; }
+.stp .phone .i { width: 20px; height: 20px; }
+.to { margin: 4px 0 0; font-size: var(--text-sm); }
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+.chip { min-height: 40px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: left; cursor: pointer; font-size: var(--text-sm); }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); font-weight: 600; }
+.saved { font-size: var(--text-xs); color: var(--muted); margin-left: auto; }
+.stepedit { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.stepedit summary { cursor: pointer; color: var(--muted); font-size: var(--text-sm); min-height: 32px; display: flex; align-items: center; }
+.stepedit summary:hover { color: var(--ink); }
+.donel { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline; padding: 4px 0;
+  font-size: var(--text-sm); color: var(--muted); border-bottom: 1px dashed var(--line); }
+.donel .i { color: var(--ok); align-self: center; }
+.donel .t { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donel .dt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.donel .o { grid-column: 2 / -1; font-size: var(--text-xs); }
+.timeline { list-style: none; padding: 0; margin: 8px 0 0; }
+.timeline li { padding: 8px 0 8px 12px; border-left: 2px solid var(--line); font-size: var(--text-sm); }
+.timeline li.stage { border-left-color: var(--accent); }
+.timeline .when { color: var(--muted); font-size: var(--text-xs); display: flex; gap: 8px; }
+.x { flex: none; display: inline-flex; align-items: center; justify-content: center; border: 0; background: var(--soft); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; color: var(--ink); }
+.x:hover { background: var(--line); }
+.toast { position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity 200ms ease; z-index: 20; pointer-events: none; }
+.toast.on { opacity: 1; }
+@media (max-width: 640px) {
+  html, body { font-size: 16px; }
+  header { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); gap: 8px; flex-wrap: wrap; } main { padding: 16px; }
+  header .grow { display: none; }
+  #add { order: 2; margin-left: auto; } nav { order: 3; width: 100%; } nav button { flex: 1; padding: 4px; }
+  input.search { order: 5; flex: 1 1 100%; }
+  .dhead { padding-inline: 16px; } .dbody { padding-inline: 16px; }
+  .x { width: 44px; height: 44px; }
+  .chips { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .chip { min-height: 44px; }
+  .stp textarea { max-height: 240px; }
+  .stp.cur .acts { position: sticky; bottom: 0; z-index: 1; background: var(--panel); margin: 12px -12px 0; padding: 8px 12px; border-top: 1px solid var(--line); }
+  .stp .h, .stepedit summary, .drawer .sub .link { min-height: 44px; }
+  table .hide-sm { display: none; }
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .ov-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who due" "nx dots"; gap: 4px 12px; padding: 12px 4px; }
+  .ov-row .who { grid-area: who; } .ov-row .due { grid-area: due; } .ov-row .nx { grid-area: nx; } .ov-row .dots { grid-area: dots; justify-self: end; }
+  .ov-row .stg { display: none; }
+  .seq li { grid-template-columns: 56px minmax(0, 1fr); } .seq .counts { grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 16px; }
+  .wrow { grid-template-columns: minmax(0, 1fr) auto; } .wnext { grid-column: 1 / -1; justify-self: stretch; } .nxo { display: flex; max-width: 100%; } .wmeta { padding-left: 0; }
+  .session { grid-template-columns: minmax(0, 1fr); } .now { padding: 16px; } .tab { min-width: 108px; padding: 12px; } .tabpanel { padding: 4px 12px 12px; }
+  .btn, input.callnote, .filters select, nav button, input.search, .drawer select.pick, .box input, .stp input, .stp select, .btn.sm { min-height: 44px; }
+  input, select, textarea { font-size: 16px; }
+  .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 12px 16px; }
+  .fstage { padding: 12px 16px; }
+  .stable .hide-sm { display: none; } .stable th, .stable td { padding: 8px 4px; }
+  .srow { grid-template-columns: minmax(0, 1fr) 72px auto; } .srow .more { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<header>
+  <select class="ws" id="ws" aria-label="Workspace"></select>
+  <nav id="tabs">
+    <button data-v="overview" class="on">Overview</button>
+    <button data-v="board">Pipeline</button>
+    <button data-v="all">Everyone</button>
+    <button data-v="strategies">Strategies</button>
+  </nav>
+  <div class="grow"></div>
+  <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
+  <button class="btn primary" id="add">Add person</button>
+</header>
+<main id="main"><div class="skeleton" aria-label="Loading your pipeline"><i></i><i></i><i></i><i></i></div>
+<noscript><p class="empty">The CRM needs JavaScript turned on to show your pipeline.</p></noscript></main>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dname"></aside>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = () => new Date().toLocaleDateString("en-CA");
+const inDays = n => new Date(Date.now() + n * 864e5).toLocaleDateString("en-CA");
+const fmt = d => d ? new Date(d.slice(0,10) + "T12:00").toLocaleDateString("en-US", {month: "short", day: "numeric"}) : "";
+const nat = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+const BLANK = "__blank__";
+
+const ICONS = {
+  email: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6l9 -6"/>',
+  call: '<path d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"/>',
+  text: '<path d="M8 9h8M8 13h6M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3z"/>',
+  linkedin: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 11v5M8 8v.01M12 16v-5M16 16v-3a2 2 0 0 0 -4 0"/>',
+  meeting: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/>',
+  task: '<path d="M9 11l3 3l8 -8"/><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9"/>',
+  close: '<circle cx="12" cy="12" r="9"/><path d="M10 10l4 4m0 -4l-4 4"/>',
+  done: '<circle cx="12" cy="12" r="9"/><path d="M9 12l2 2l4 -4"/>',
+  hot: '<path d="M12 12c2 -2.96 0 -7 -1 -8c0 3.04 -1.77 4.74 -3 6c-1.23 1.26 -2 3.24 -2 5a6 6 0 1 0 12 0c0 -1.53 -1.06 -3.94 -2 -5c-1.79 3 -2.79 3 -4 2z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  wait: '<path d="M5 12h14M13 6l6 6l-6 6"/>',
+  x: '<path d="M6 6l12 12M18 6l-12 12"/>',
+  ai: '<path d="M12 3l1.9 5.1l5.1 1.9l-5.1 1.9l-1.9 5.1l-1.9 -5.1l-5.1 -1.9l5.1 -1.9z"/><path d="M18 15l.8 2.2l2.2 .8l-2.2 .8l-.8 2.2l-.8 -2.2l-2.2 -.8l2.2 -.8z"/>',
+  building: '<path d="M4 21v-15a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v15"/><path d="M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 8h4M8 12h4M8 16h4"/>',
+  pin: '<path d="M12 21s-6 -5.4 -6 -10.5a6 6 0 1 1 12 0c0 5.1 -6 10.5 -6 10.5z"/><circle cx="12" cy="10.5" r="2"/>',
+};
+const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ICONS.task}</svg>`;
+const TYPES = { email: "Email", call: "Call", text: "Text", linkedin: "LinkedIn", meeting: "Meeting", task: "To do", close: "Close if no reply" };
+const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"]];
+const noFilters = () => ({ stage: "", due: "", strategy: "", custom: {} });
+
+let state = { ws: null, view: "overview", board: null, workspaces: [], f: noFilters(), sort: { key: "updated", dir: -1 },
+  allEmails: false, warmTab: "close", pick: "", pickNote: "", session: null, stratOpen: null, open: new Set() };
+try { state.view = localStorage.getItem("crm.view") || "overview"; state.warmTab = localStorage.getItem("crm.warmTab") || "close"; } catch (e) {}
+if (state.view === "today") state.view = "overview";
+const curWs = () => state.workspaces.find(w => w.slug === state.ws);
+const stageInfo = () => Object.fromEntries(state.board.stages.map(s => [s.name, s]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await r.json();
+  if (!r.ok) { toast(data.error || "Something went wrong"); throw new Error(data.error); }
+  return data;
+}
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2000); }
+
+// filters and sort are remembered per workspace
+function loadPrefs() {
+  let p = {}; try { p = JSON.parse(localStorage.getItem("crm.prefs." + state.ws) || "{}"); } catch (e) {}
+  state.f = { ...noFilters(), ...p.f }; state.sort = p.sort || { key: "updated", dir: -1 };
+}
+function savePrefs() { try { localStorage.setItem("crm.prefs." + state.ws, JSON.stringify({ f: state.f, sort: state.sort })); } catch (e) {} }
+
+// custom fields worth a filter: ones with a handful of distinct values, like Batch
+const shownFields = () => curWs().fields.filter(f => !f.hide);
+function customOptions() {
+  return shownFields().map(fd => ({ name: fd.name, vals: [...new Set(state.board.contacts
+      .map(c => c.custom?.[fd.name]).filter(v => v != null && v !== "").map(String))].sort(nat) }))
+    .filter(o => o.vals.length && o.vals.length <= 40);
+}
+// drop saved filters that no longer match anything selectable, so a hidden filter never empties the list
+function cleanFilters() {
+  const f = state.f;
+  if (f.stage && f.stage[0] !== "@" && !state.board.stages.some(s => s.name === f.stage)) f.stage = "";
+  if (f.strategy && f.strategy !== "none" && !state.board.strategies.some(s => String(s.id) === f.strategy)) f.strategy = "";
+  const opts = Object.fromEntries(customOptions().map(o => [o.name, o.vals]));
+  for (const [k, v] of Object.entries(f.custom)) if (v && !(opts[k] && (v === BLANK || opts[k].includes(v)))) delete f.custom[k];
+}
+function filtered(skipStage, skipDue) {
+  const f = state.f, t = today(), week = inDays(7), st = stageInfo();
+  const names = Object.fromEntries(state.board.strategies.map(s => [String(s.id), s.name]));
+  return state.board.contacts.filter(c => {
+    if (f.stage && !skipStage) {
+      const k = st[c.stage]?.kind;
+      if (f.stage === "@live") { if (!["open", "active"].includes(k)) return false; }
+      else if (f.stage === "@hot") { if (!st[c.stage]?.hot) return false; }
+      else if (f.stage[0] === "@") { if (k !== f.stage.slice(1)) return false; }
+      else if (c.stage !== f.stage) return false;
+    }
+    if (f.strategy && (f.strategy === "none" ? c.strategy : c.strategy !== names[f.strategy])) return false;
+    for (const [k, v] of Object.entries(f.custom)) {
+      const cv = String(c.custom?.[k] ?? "");
+      if (v && (v === BLANK ? cv !== "" : cv !== v)) return false;
+    }
+    if (!skipDue) {
+      const d = c.next_due;
+      if (f.due === "now" && !(c.next_step && d && d <= t)) return false;
+      if (f.due === "week" && !(c.next_step && d && d <= week)) return false;
+      if (f.due === "none" && c.next_step) return false;
+    }
+    return true;
+  });
+}
+function sorted(rows) {
+  const { key, dir } = state.sort;
+  const order = Object.fromEntries(state.board.stages.map((s, i) => [s.name, i]));
+  const val = c => key === "stage" ? order[c.stage] ?? 999 : key === "person" ? (c.person || c.company)
+    : key.startsWith("c:") ? c.custom?.[key.slice(2)] : c[key];
+  return [...rows].sort((a, b) => {
+    const x = val(a), y = val(b), ex = x == null || x === "", ey = y == null || y === "";
+    if (ex || ey) return ex - ey; // blanks always last
+    return (typeof x === "number" ? x - y : nat(x, y)) * dir;
+  });
+}
+function filterBar({ stage = true, due = true } = {}, shown) {
+  const f = state.f, total = state.board.contacts.length;
+  const sel = (key, opts, val) => `<select data-f="${esc(key)}" class="${val ? "set" : ""}">${opts.map(([v, l]) =>
+    `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const parts = [];
+  if (stage) parts.push(sel("stage", [["", "All stages"], ["@hot", "Hot"], ["@live", "Still in play"], ["@won", "Won"], ["@closed", "Closed"],
+    ...state.board.stages.map(s => [s.name, s.name])], f.stage));
+  if (state.board.strategies.length) parts.push(sel("strategy", [["", "All strategies"],
+    ...state.board.strategies.map(s => [String(s.id), s.name]), ["none", "No strategy"]], f.strategy));
+  for (const o of customOptions()) parts.push(sel("c:" + o.name, [["", `Any ${o.name.toLowerCase()}`],
+    ...o.vals.map(v => [v, v]), [BLANK, `No ${o.name.toLowerCase()}`]], f.custom[o.name] || ""));
+  if (due) parts.push(sel("due", DUE, f.due));
+  const any = (stage && f.stage) || (due && f.due) || f.strategy || Object.values(f.custom).some(Boolean);
+  return `<div class="filters">${parts.join("")}<span class="count">${shown === total ? `${total} people` : `${shown} of ${total} people`}</span>
+    ${any ? `<button class="link" id="clearF">Clear filters</button>` : ""}</div>`;
+}
+
+function duePill(d, hasStep = true) {
+  if (!d) return hasStep ? `<span class="pill">No date</span>` : "";
+  const t = today();
+  if (d < t) return `<span class="pill late">Overdue since ${fmt(d)}</span>`;
+  if (d === t) return `<span class="date today">Today</span>`;
+  return `<span class="date">${fmt(d)}</span>`;
+}
+// the step dots: one per step in their plan, colored by type (email blue, call green, close grey, the rest pink),
+// filled for the ones behind them, the current one bigger, paused dashed, skipped faint
+const DOT_STATE = { done: "f", skipped: "s", paused: "p", planned: "" };
+const dotType = t => ["email", "call", "close"].includes(t) ? t : "other";
+function dots(c) {
+  const p = c.progress || {}, steps = p.steps || [], past = (p.done || 0) + (p.skipped || 0), n = steps.length;
+  const out = steps.map(([type, status], i) => `<i class="${dotType(type)} ${i === past && status === "planned" ? "at" : DOT_STATE[status] ?? ""}"></i>`);
+  if (stageInfo()[c.stage]?.kind === "closed") {
+    const label = `Closed: ${c.stage}${n ? `, after ${p.done} of ${n} steps` : ""}`;
+    return `<span class="dots dead" role="img" aria-label="${esc(label)}" title="${esc(label)}">${steps.map(() => "<i></i>").join("")}<i class="end"></i></span>`;
+  }
+  if (!n) return "";
+  const cur = c.current, kind = cur ? TYPES[cur.type] || cur.type : "";
+  const label = p.planned ? `Step ${past + 1} of ${n}: ${cur.label && !cur.label.startsWith(kind) ? `${kind}, ${cur.label}` : cur.label || kind}`
+    : p.paused ? `${past} of ${n} steps done, ${p.paused} paused` : `All ${n} steps done`;
+  return `<span class="dots" role="img" aria-label="${esc(label)}" title="${esc(label)}">${out.join("")}</span>`;
+}
+const dotLegend = `<div class="legend" aria-label="Step dot colors"><span class="dots"><i class="email f"></i></span>Email<span class="dots"><i class="call f"></i></span>Call
+  <span class="dots"><i class="other f"></i></span>Text, LinkedIn, meeting, to do<span class="dots"><i class="close f"></i></span>Close if no reply</div>`;
+function nextText(c) {
+  const s = c.current;
+  if (!s) return `<span class="muted">${c.progress?.paused ? "Paused, needs a next step" : "No next step"}</span>`;
+  const phone = c.phone || c.custom?.Mobile;
+  const detail = s.type === "email" && s.subject && !s.label.includes(s.subject) ? `${s.label}: ${s.subject}` : s.label;
+  return `${icon(s.type)}<span>${esc(detail)}</span>${s.type === "call" && phone ? `<span class="muted">${esc(phone)}</span>` : ""}`;
+}
+// stage colors: paid green, warm orange, closed red, in-progress blue, not started gray
+function stageClass(name) {
+  const s = stageInfo()[name] || {};
+  return s.paid ? "paid" : s.hot ? "hot" : s.kind === "closed" ? "dead" : s.kind === "active" ? "blue" : "";
+}
+function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(c.stage)}</span>`; }
+const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
+  ["call_back", "Call back later"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"]];
+function row(c) {
+  return `<div class="ov-row" data-id="${c.id}">
+    <div class="who">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>
+    <div class="stg">${stagePill(c)}</div>${dots(c)}<div class="nx">${nextText(c)}</div>
+    <div class="due">${c.current ? duePill(c.current.due) : ""}</div></div>`;
+}
+const byDue = list => [...list].sort((a, b) => (a.current?.due || "9") < (b.current?.due || "9") ? -1 : 1);
+
+async function load() {
+  const q = encodeURIComponent($("#q").value.trim());
+  try { state.board = await api(`/api/board?workspace=${state.ws}&q=${q}`); }
+  catch (e) {
+    if (!state.board) $("#main").innerHTML = `<div class="empty">The CRM didn't answer, so nothing could load. It usually restarts on its own within a minute.
+      <button class="btn" id="retry" type="button">Try again</button></div>`;
+    return;
+  }
+  render();
+}
+
+function render() {
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
+  if (!state.board) return;
+  cleanFilters();
+  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies })[state.view]();
+}
+
+// ---- overview: the numbers, warm leads, a calling session, then the rest of today -------------------
+// the outreach chat's mark: outline = it has seen them and saved a plan, filled = they're in the next batch
+function aiMark(c) {
+  if (!c.ai_state) return `<span class="ai" aria-hidden="true"></span>`;
+  const label = c.ai_state === "batch" ? `In the next outreach batch${c.ai_note ? `: ${c.ai_note}` : ""}`
+    : `The outreach chat has a plan for them${c.ai_note ? `: ${c.ai_note}` : ""}`;
+  return `<span class="ai ${c.ai_state}" title="${esc(label)}" role="img" aria-label="${esc(label)}">${icon("ai")}</span>`;
+}
+const aiLegend = `<div class="legend"><span><span class="ai seen">${icon("ai")}</span>AI has a plan</span><span><span class="ai batch">${icon("ai")}</span>In the next batch</span></div>`;
+const daysText = n => n == null ? "never" : n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+const contactedText = c => { const n = daysSince(c.last_touch); return `<span class="${n == null || n >= 7 ? "cold" : "muted"}">${daysText(n)}</span>`; };
+const whoCell = c => `<div class="who" data-open="${c.id}">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>`;
+const others = c => state.board.contacts.filter(x => x.company === c.company && x.id !== c.id).length;
+const companyTag = c => `<button class="tag" type="button" data-company="${esc(c.company)}" title="Everyone at ${esc(c.company)}">${icon("building")}<span>${esc(c.company)}</span>${others(c) ? `<span class="tagn">+${others(c)} here</span>` : ""}</button>`;
+const placeOf = c => c.location ? `<span class="place">${icon("pin")}${esc(c.location)}</span>` : "";
+
+// a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
+function warmRow(c) {
+  const said = c.last_said && !/^Strategy:/.test(c.last_said) ? c.last_said : "";
+  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due)}</span>`
+    : `<span class="pill late">Next outreach not scheduled</span>`;
+  return `<div class="wrow" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${dots(c)}</div><div class="wnext">${next}</div>
+    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}</div></div>`;
+}
+function warmPanel(list) {
+  const t = today(), callNow = c => c.current?.type === "call" && (!c.current.due || c.current.due <= t);
+  const byNext = l => [...l].sort((x, y) => (x.current?.due || "") < (y.current?.due || "") ? -1 : 1);  // not scheduled first
+  const groups = [
+    { key: "call", name: "Call today", hint: "Warm people with a call due today or earlier.", list: byDue(list.filter(callNow)) },
+    { key: "follow", name: "Follow up", hint: "Every other warm lead, by when you next reach out. Anyone with nothing scheduled is at the top.",
+      list: byNext(list.filter(c => !callNow(c))) },
+  ];
+  const on = groups.find(g => g.key === state.warmTab) || groups[0];
+  return `<div class="warm"><div class="tabs" role="tablist" aria-label="Warm leads">${groups.map(g =>
+      `<button class="tab" role="tab" type="button" id="wt-${g.key}" data-warmtab="${g.key}" aria-selected="${g === on}" aria-controls="wp" tabindex="${g === on ? 0 : -1}">
+        <b>${g.list.length}</b><span>${g.name}</span></button>`).join("")}</div>
+    <div class="tabpanel" role="tabpanel" id="wp" aria-labelledby="wt-${on.key}"><p class="hint">${on.hint}</p>
+      ${on.list.length ? on.list.map(warmRow).join("") : `<div class="empty">No one here right now.</div>`}</div></div>`;
+}
+
+// the calling session: one call at a time, what's next, and what you've logged today (kept for the day)
+const sessionKey = () => `crm.session.${state.ws}.${today()}`;
+function loadSession() {
+  if (state.session?.key === sessionKey()) return state.session;
+  let s = {}; try { s = JSON.parse(localStorage.getItem(sessionKey()) || "{}"); } catch (e) {}
+  state.session = { key: sessionKey(), log: s.log || [], skipped: s.skipped || [] };
+  return state.session;
+}
+function saveSession() { try { localStorage.setItem(sessionKey(), JSON.stringify({ log: state.session.log, skipped: state.session.skipped })); } catch (e) {} }
+function callSession(calls) {
+  const ses = loadSession(), skipped = new Set(ses.skipped);
+  const queue = [...calls.filter(c => !skipped.has(c.id)), ...calls.filter(c => skipped.has(c.id))];
+  const c = queue[0], total = calls.length + ses.log.length, warmN = ses.log.filter(x => WARM_OUT.has(x.outcome)).length;
+  const now = !c ? `<div class="now"><h3>${icon("done")}${ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
+      <p class="muted">${ses.log.length ? `${ses.log.length} logged, ${warmN} warm. The warm ones are in the panel above with their next outreach.` : "New ones show up here on the day they're due."}</p></div>` : `
+    <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
+      <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
+      <div class="sub">${companyTag(c)}${placeOf(c)}</div>
+      <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due)}</div></div>
+      ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
+      ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
+      <div class="lbl" id="whl">What happened?</div>
+      <div class="chips" role="group" aria-labelledby="whl">${CALL_LOG.map(([v, t]) =>
+        `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}" type="button" data-pick="${v}" aria-pressed="${state.pick === v}">${t}</button>`).join("")}</div>
+      <label for="callNote">Note (optional)</label><input id="callNote" class="callnote" placeholder="Wants a demo Tuesday" enterkeyhint="done" value="${esc(state.pickNote || "")}">
+      <div class="go"><button class="btn primary" id="logNext" type="button"${state.pick ? "" : " disabled"}>Log and next</button>
+        <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
+    </div>`;
+  const next = queue.slice(1, 6).map(x => `<li data-open="${x.id}">${aiMark(x)}<span class="nm"><b>${esc(x.person || x.company)}</b>${x.person ? `<span class="co">${esc(x.company)}</span>` : ""}</span>
+    <span class="date">${esc(x.location ? x.location.split(",")[0] : "")}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
+  const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
+    <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(CALL_LOG.find(y => y[0] === x.outcome)?.[1] || x.outcome)}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
+    || `<li class="muted">Each call you log shows up here, with undo.</li>`;
+  return `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
+      <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>
+    <div class="session">${now}<div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
+}
+const WARM_OUT = new Set(["interested", "call_back", "talked", "maybe"]);
+const phoneOf = c => c.phone || c.mobile;
+
+async function logSessionCall() {
+  const card = $(".now[data-step]");
+  if (!card || !state.pick) return;
+  const cid = Number(card.dataset.cid), step = Number(card.dataset.step), c = state.board.contacts.find(x => x.id === cid);
+  const note = $("#callNote").value.trim(), outcome = state.pick;
+  $("#logNext").disabled = true;
+  try {
+    const r = await api(`/api/steps/${step}/done`, { method: "POST", body: { outcome, note } });
+    const ses = loadSession();
+    ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0 });
+    ses.skipped = ses.skipped.filter(id => id !== cid);
+    saveSession(); state.pick = ""; state.pickNote = "";
+    toast(r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
+    await load();
+    if (r.after_call_step) openEmail(cid, r.after_call_step);
+  } catch (e) { $("#logNext").disabled = false; }
+}
+// open their panel with one step unfolded, e.g. the after-call email a lukewarm call added
+function openEmail(cid, sid) { state.openFor = Number(cid); state.open = new Set([Number(sid)]); openContact(cid); }
+async function undoSessionCall(step) {
+  const ses = loadSession(), i = ses.log.findIndex(x => x.step === step);
+  try {
+    await api(`/api/steps/${step}/undo`, { method: "POST" });
+    if (i >= 0) ses.log.splice(i, 1);
+    saveSession(); toast("Undone, they're back in the queue"); await load();
+  } catch (e) {}
+}
+
+function renderOverview() {
+  const st = stageInfo(), t = today(), stages = state.board.stages;
+  const list = filtered(true, true);
+  const kind = c => st[c.stage]?.kind;
+  const done = c => ["won", "closed"].includes(kind(c));
+  // the money part of the pipeline: Interested and everything after it, up to the won stage
+  const iInt = stages.findIndex(s => s.name === "Interested");
+  const afterNames = new Set(stages.slice(Math.max(iInt, 0)).filter(s => s.kind !== "closed").map(s => s.name));
+  const warm = list.filter(c => st[c.stage]?.hot || kind(c) === "won");
+  const has = n => n ? " has" : "";
+  const paid = list.filter(c => st[c.stage]?.paid).length, dead = list.filter(c => kind(c) === "closed").length;
+  const interested = list.filter(c => afterNames.has(c.stage)).length;
+  const dueNow = c => !done(c) && c.current?.due && c.current.due <= t;
+  // calls and emails are the cold outreach; warm people live in the warm panel with their next outreach
+  const cold = c => dueNow(c) && !st[c.stage]?.hot;
+  const calls = byDue(list.filter(c => cold(c) && c.current.type === "call"));
+  const emails = byDue(list.filter(c => cold(c) && c.current.type === "email"));
+  const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type)));
+  const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
+
+  const strip = `<div class="strip"><div class="hotn${has(warm.length)}"><b>${warm.length}</b><span>warm</span></div>
+    <div><b>${interested}</b><span>interested or further</span></div><div class="paidn${has(paid)}"><b>${paid}</b><span>at a paid stage</span></div>
+    <div><b>${dead}</b><span>dead</span></div><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
+  const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm)}</div>`;
+  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2></div>${callSession(calls)}</div>`;
+  const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
+    ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
+      <div class="rows">${shownEmails.map(row).join("")}</div>
+      ${emails.length > shownEmails.length ? `<button class="btn more-btn" data-allemails type="button">Show all ${emails.length} emails</button>` : ""}`
+      : `<div class="empty">No emails due.</div>`}</div>`;
+  const otherSec = other.length ? `<div class="section"><div class="head"><h2>Other things due</h2><span class="n">${other.length}</span></div><div class="rows">${other.map(row).join("")}</div></div>` : "";
+  const strat = !state.board.strategies.length ? "" : `<div class="section"><div class="head"><h2>Strategies</h2></div>
+    <table class="stable"><thead><tr><th>Strategy</th><th class="num">People</th><th class="num">Interested</th><th class="num">Closed<span class="hide-sm"> (paid)</span></th><th class="num">Dead</th>
+      <th class="hide-sm">Steps</th></tr></thead><tbody>${state.board.strategies.map(s => {
+        const n = stratNumbers(s.id), last = s.steps[s.steps.length - 1];
+        return `<tr data-strat="${s.id}"><td><b>${esc(s.name)}</b></td><td class="num">${n.volume}</td><td class="num">${n.intrPct}%</td>
+          <td class="num">${n.closedPct}%</td><td class="num">${n.deadPct}%</td>
+          <td class="hide-sm muted">${s.steps.length} steps over ${last ? last.day : 0} days</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+  const sname = state.f.strategy === "none" ? "people with no strategy" : state.board.strategies.find(x => String(x.id) === state.f.strategy)?.name;
+  const filteredNote = sname ? `<p class="filtered">Showing ${esc(sname)} only, so every number below counts ${list.length} of ${state.board.contacts.length} people.</p>` : "";
+  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + warmSec + callSec + emailSec + otherSec + strat;
+}
+
+function renderBoard() {
+  const list = filtered(true, false);
+  $("#main").innerHTML = filterBar({ stage: false }, list.length) + `<div class="board">${state.board.stages.map(s => {
+    const cs = list.filter(c => c.stage === s.name);
+    return `<div class="col ${s.kind === "closed" ? "closed" : ""}"><div class="colhead"><h3>${esc(s.name)}</h3><span class="n">${cs.length}</span></div>
+      ${cs.slice(0, 150).map(c => `<div class="card" data-id="${c.id}">
+        <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due) : ""}</div>
+        ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
+        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}</div>`).join("")}
+      ${cs.length > 150 ? `<div class="empty">+${cs.length - 150} more, search to narrow</div>` : ""}</div>`;
+  }).join("")}</div>`;
+}
+
+function renderAll() {
+  const rows = sorted(filtered(false, false));
+  const fields = shownFields().map(f => f.name);
+  const th = (key, label, cls = "") => `<th data-sort="${esc(key)}" class="${cls}">${esc(label)}${state.sort.key === key
+    ? ` <span class="arrow">${state.sort.dir > 0 ? "↑" : "↓"}</span>` : ""}</th>`;
+  $("#main").innerHTML = filterBar({}, rows.length) + `<table><thead><tr>${th("person", "Person")}${th("company", "Company")}${th("stage", "Stage")}
+      ${th("strategy", "Strategy", "hide-sm")}${fields.map(n => th("c:" + n, n, "hide-sm")).join("")}${th("next_step", "Next step", "hide-sm")}
+      ${th("next_due", "Due", "hide-sm")}${th("updated", "Last activity", "hide-sm")}</tr></thead>
+    <tbody>${rows.map(c => `<tr data-id="${c.id}"><td><span class="tdwho">${c.ai_state ? aiMark(c) : ""}${esc(c.person)}</span></td><td>${esc(c.company)}</td><td><span class="tdstage">${esc(c.stage)}${dots(c)}</span></td>
+      <td class="hide-sm">${esc(c.strategy)}</td>${fields.map(n => `<td class="hide-sm">${esc(c.custom?.[n])}</td>`).join("")}
+      <td class="hide-sm">${esc(c.next_step)}</td><td class="hide-sm">${fmt(c.next_due)}</td><td class="hide-sm">${fmt(c.updated)}</td></tr>`).join("")
+      || `<tr><td colspan="${7 + fields.length}" class="empty">No one matches these filters.</td></tr>`}</tbody></table>`;
+}
+
+// ---- strategies ----------------------------------------------------------------------------------
+function stratStep(s = { type: "email", day: 0 }) {
+  const typeSel = `<select data-k="type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}"${k === s.type ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+  return `<div class="srow">${typeSel}<input data-k="day" type="number" min="0" step="1" value="${esc(s.day)}" title="Day, counted from the start" aria-label="Day">
+    <div class="more"><input data-k="title" value="${esc(s.title)}" placeholder="Name, like Bump or Second call">
+      <input data-k="subject" value="${esc(s.subject)}" placeholder="Email subject (optional)" ${s.type === "email" ? "" : "hidden"}>
+      <textarea data-k="body" placeholder="${s.type === "email" ? "Message template (optional)" : "Notes or talking points (optional)"}">${esc(s.body)}</textarea></div>
+    <button class="btn sm" data-rm type="button" aria-label="Remove step">${icon("x")}</button></div>`;
+}
+function stratCard(s) {
+  return `<div class="strat" data-sid="${s.id || ""}">
+    <input class="name" data-k="name" value="${esc(s.name)}" placeholder="Strategy name" aria-label="Strategy name">
+    <input class="desc" data-k="description" value="${esc(s.description)}" placeholder="What this strategy is for" aria-label="Description">
+    <div class="muted note">${s.id ? `${s.used} people follow it.` : "New strategy."} Day 0 is the day someone starts. Weekends move to Monday.</div>
+    <div class="ssteps">${(s.steps || []).map(stratStep).join("")}</div>
+    <div class="row"><button class="btn sm" data-addstep>Add step</button><div class="grow"></div>
+      ${s.id && !s.used ? `<button class="btn sm danger" data-delstrat>Delete</button>` : ""}
+      <button class="btn primary sm" data-savestrat>Save</button></div></div>`;
+}
+// a share of contacted people; one decimal under 10% so 1 in 239 doesn't read as zero
+const share = (n, of) => { if (!of) return 0; const v = 100 * n / of; return v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
+const daysSince = iso => iso ? Math.round((Date.parse(today()) - Date.parse(iso.slice(0, 10))) / 864e5) : null;
+function stratNumbers(id) {
+  const x = state.board.stats.find(r => r.id === id) || { people: 0, contacted: 0, paid: 0, no: 0, bounced: 0, by_stage: {} };
+  const stages = state.board.stages, i = stages.findIndex(s => s.name === "Interested");
+  const after = stages.slice(Math.max(i, 0)).filter(s => s.kind !== "closed").map(s => s.name);
+  const intr = after.reduce((n, name) => n + (x.by_stage[name] || 0), 0);
+  const pct = n => share(n, x.contacted);
+  return { volume: x.people, contacted: x.contacted, intr, intrPct: pct(intr), closed: x.paid, closedPct: pct(x.paid),
+    dead: x.no + x.bounced, deadPct: pct(x.no + x.bounced) };
+}
+function stratBox(s) {
+  const n = stratNumbers(s.id), last = s.steps[s.steps.length - 1];
+  return `<button class="scard sbox" data-strat="${s.id}" type="button">
+    <b class="sname">${esc(s.name)}</b><div class="muted steps-n">${s.steps.length} steps over ${last ? last.day : 0} days</div>
+    ${s.description ? `<p class="muted desc">${esc(s.description)}</p>` : ""}
+    <dl><dt>Volume</dt><dd>${n.volume}</dd><dt>Interested</dt><dd>${n.intrPct}%</dd>
+      <dt>Closed (paid)</dt><dd>${n.closedPct}%</dd><dt>Dead</dt><dd>${n.deadPct}%</dd></dl></button>`;
+}
+// the dropdown at the top of the Strategies tab: pick one to view and edit, or see them all
+function stratPicker() {
+  const on = state.stratOpen ? String(state.stratOpen) : "";
+  return `<div class="filters"><label for="stratPick" class="vh">Strategy</label><select id="stratPick" class="${on ? "set" : ""}">
+    <option value="">All strategies</option>${state.board.strategies.map(s => `<option value="${s.id}"${String(s.id) === on ? " selected" : ""}>${esc(s.name)}</option>`).join("")}
+    <option value="new"${on === "new" ? " selected" : ""}>New strategy</option></select></div>`;
+}
+function renderStrategies() {
+  if (state.stratOpen) return renderStrategyDetail(state.stratOpen);
+  $("#main").innerHTML = stratPicker() + `<div class="head" style="margin-top:0"><h2>Strategies</h2><span class="n">${state.board.strategies.length}</span></div>
+    <p class="muted lede">Each box is one sequence people go through. Open one to see its steps and how it's doing.</p>
+    <div class="strats">${state.board.strategies.map(stratBox).join("")}
+      <button class="scard sbox newcard" id="newStrat" type="button">New strategy</button></div>
+    <div class="section"><div class="head"><h2>After-call email</h2></div>
+      <p class="muted lede">Tapping "Lukewarm, wants an email" on a call adds this email, due today. {first_name} becomes their first name. You can still edit each one before it goes.</p>
+      <div class="box acbox"><label for="acSubject">Subject</label><input id="acSubject" value="${esc(curWs().after_call?.subject)}">
+        <label for="acBody">Message</label><textarea id="acBody" rows="12">${esc(curWs().after_call?.body)}</textarea>
+        <div class="row"><button class="btn primary" id="acSave" type="button">Save template</button></div></div></div>`;
+}
+async function renderStrategyDetail(id) {
+  const back = stratPicker();
+  if (id === "new") {
+    $("#main").innerHTML = back + `<div class="head"><h2>New strategy</h2></div><div id="stratEdit">${stratCard({ name: "", steps: [{ type: "email", day: 0 }] })}</div>`;
+    return $("#stratEdit .name").focus();
+  }
+  const d = await api(`/api/strategies/${id}`);
+  if (state.stratOpen !== id) return;
+  const pct = (p, n) => `<b>${p}%</b><span>${n} ${n === 1 ? "person" : "people"}</span>`;
+  $("#main").innerHTML = back + `<div class="head"><h2>${esc(d.name)}</h2></div>
+    ${d.description ? `<p class="muted lede">${esc(d.description)}</p>` : ""}
+    <div class="summary"><div class="kpis">
+      <div class="kpi"><b>${d.volume}</b><span>Volume (${d.contacted} contacted)</span></div>
+      <div class="kpi">${pct(d.interested_pct, d.interested).replace("<span>", "<span>Interested, ")}</div>
+      <div class="kpi paid${d.closed ? " has" : ""}">${pct(d.closed_pct, d.closed).replace("<span>", "<span>Closed at a paid stage, ")}</div>
+      <div class="kpi">${pct(d.dead_pct, d.dead).replace("<span>", "<span>Dead, ")}</div></div></div>
+    <p class="muted note">Shares are out of the people contacted so far.</p>
+    <div class="section"><div class="head"><h2>Steps</h2></div>
+      <ol class="seq">${d.steps.map((x, i) => `<li>
+        <div class="day">Day ${x.day}</div>
+        <div class="what">${icon(x.type)}<b>${esc(x.title || TYPES[x.type])}</b>${x.title && x.title !== TYPES[x.type] ? `<span class="muted">${esc(TYPES[x.type])}</span>` : ""}</div>
+        <div class="counts"><span><b>${x.done}</b> did it</span><span><b>${x.now}</b> on it now</span><span><b>${x.ahead}</b> still ahead</span>
+          ${x.paused ? `<span><b>${x.paused}</b> paused</span>` : ""}</div></li>`).join("")}</ol>
+      <div class="row"><button class="btn" data-stratedit type="button">Edit steps</button></div>
+      <div id="stratEdit"></div></div>`;
+}
+function readStrat(card) {
+  return { id: card.dataset.sid ? Number(card.dataset.sid) : null, workspace: state.ws,
+    name: card.querySelector('[data-k="name"]').value.trim(), description: card.querySelector('[data-k="description"]').value.trim(),
+    steps: [...card.querySelectorAll(".srow")].map(r => Object.fromEntries([...r.querySelectorAll("[data-k]")].map(i => [i.dataset.k, i.value]))) };
+}
+
+// ---- person panel --------------------------------------------------------------------------------
+const FIELDS = [["person", "Person"], ["company", "Company (required)"], ["role", "Role"], ["email", "Email"], ["phone", "Phone"],
+  ["mobile", "Mobile"], ["location", "City and state"], ["website", "Website"], ["source", "Source"]];
+const KINDS = { call: "Call", voicemail: "Voicemail", email: "Email", bump: "Bump", reply: "Reply", text: "Text", linkedin: "LinkedIn",
+  meeting: "Meeting", note: "Note", stage: "Stage change", bounce: "Bounced" };
+const SOURCES = { import: "imported", sender: "by the sender", task: "by the morning task", claude: "by Claude" };
+const kindLabel = k => KINDS[k] || (k ? k[0].toUpperCase() + k.slice(1) : "");
+function touchItem(t) {
+  const src = SOURCES[t.source] || (t.source && t.source !== "web" ? `by ${t.source}` : "");
+  return `<li class="${t.kind === "stage" ? "stage" : ""}"><div class="when"><span>${fmt(t.at)}</span><span>${esc(kindLabel(t.kind))}</span>${src ? `<span>${esc(src)}</span>` : ""}</div>${esc(t.summary)}</li>`;
+}
+function detailsView(c, shown) {
+  const hidden = new Set(curWs().fields.filter(f => f.hide).map(f => f.name));
+  const custom = Object.entries(c.custom || {}).filter(([k, v]) => v !== "" && v != null && !hidden.has(k));
+  const web = c.website ? (/^https?:/i.test(c.website) ? c.website : "https://" + c.website) : "";
+  // the number the current call step shows in big type isn't repeated here
+  const tel = (label, n) => n && n !== shown ? `<dt>${label}</dt><dd><a href="tel:${esc(n)}">${esc(n)}</a></dd>` : "";
+  return `<dl class="facts">
+    ${c.email ? `<dt>Email</dt><dd><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></dd>` : ""}
+    ${tel("Phone", c.phone)}${tel("Mobile", c.mobile)}
+    ${c.location ? `<dt>Location</dt><dd>${esc(c.location)}</dd>` : ""}
+    ${web ? `<dt>Website</dt><dd><a href="${esc(web)}" target="_blank" rel="noopener">${esc(c.website)}</a></dd>` : ""}
+    ${custom.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}
+    ${c.source ? `<dt>Source</dt><dd>${esc(c.source)}</dd>` : ""}
+    ${c.notes ? `<dt>Notes</dt><dd class="pre">${esc(c.notes)}</dd>` : ""}</dl>`;
+}
+function detailsForm(c) {
+  const ws = curWs();
+  const names = [...shownFields().map(f => f.name), ...Object.keys(c.custom || {}).filter(k => !ws.fields.some(f => f.name === k))];
+  return `<div class="box"><div class="grid2">${FIELDS.map(([k, l]) => `<div><label for="e-${k}">${l}</label><input id="e-${k}" data-e="${k}" value="${esc(c[k])}"></div>`).join("")}
+    ${names.map((n, i) => `<div><label for="e-c${i}">${esc(n)}</label><input id="e-c${i}" data-custom="${esc(n)}" value="${esc(c.custom?.[n] ?? "")}" title="${esc(ws.fields.find(f => f.name === n)?.help || "")}"></div>`).join("")}</div>
+    <label for="e-notes">Notes</label><textarea id="e-notes" class="short">${esc(c.notes)}</textarea>
+    <div class="row"><button class="btn primary" id="saveDetails" type="button">Save details</button><button class="btn" id="cancelDetails" type="button">Cancel</button></div></div>`;
+}
+
+// step text saves itself a moment after you stop typing; drafts survive a re-render until the server has them
+const pendingSaves = new Map();
+state.drafts = {};
+const draft = (s, k) => state.drafts[`${s.id}:${k}`] ?? s[k];
+function queueSave(sid, k, value) {
+  state.drafts[`${sid}:${k}`] = value;
+  const p = pendingSaves.get(sid) || { body: {} };
+  p.body[k] = value; clearTimeout(p.t);
+  p.t = setTimeout(() => flushStep(sid), 600);
+  pendingSaves.set(sid, p);
+  savedNote(sid, "Saving");
+}
+async function flushStep(sid) {
+  const p = pendingSaves.get(sid);
+  if (!p) return;
+  pendingSaves.delete(sid); clearTimeout(p.t);
+  try {
+    await api(`/api/steps/${sid}`, { method: "PATCH", body: p.body });
+    for (const [k, v] of Object.entries(p.body)) if (state.drafts[`${sid}:${k}`] === v) delete state.drafts[`${sid}:${k}`];
+    savedNote(sid, "Saved");
+  } catch (e) { savedNote(sid, "Not saved yet. Your text is kept, type again to retry"); }
+}
+const flushAll = () => Promise.all([...pendingSaves.keys()].map(flushStep));
+function savedNote(sid, msg) {
+  const el = document.querySelector(`[data-step="${sid}"] .saved`);
+  if (!el) return;
+  el.textContent = msg; clearTimeout(el.t);
+  if (msg === "Saved") el.t = setTimeout(() => { el.textContent = ""; }, 1500);
+}
+
+function stepBody(s, c) {
+  const id = k => `s${s.id}-${k}`, lab = (k, text) => `<label for="${id(k)}">${text}</label>`;
+  const phone = s.type === "text" ? (c.mobile || c.phone) : (c.phone || c.mobile);
+  const closed = curWs().stages.find(x => x.kind === "closed")?.name || "closed";
+  const typeSel = `<select id="${id("type")}" data-s="type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}"${k === s.type ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+  const body = (label, cls = "", ph = "") => `${lab("body", label)}<textarea id="${id("body")}" data-s="body" class="${cls}" placeholder="${ph}">${esc(draft(s, "body"))}</textarea>`;
+  let fields = "", actions = "";
+  if (s.type === "email") {
+    fields = `<p class="to"><span class="muted">To</span> ${c.email ? esc(c.email) : `<span class="muted">no email saved yet</span>`}</p>
+      ${lab("subject", "Subject")}<input id="${id("subject")}" data-s="subject" value="${esc(draft(s, "subject"))}" placeholder="Subject">
+      ${body("Message", "", "The email to send")}`;
+    // an email can't be sent without an address, so the main button adds one instead
+    actions = c.email ? `<button class="btn primary" data-act="done" type="button">Mark sent</button>
+        <button class="btn" data-act="outlook" type="button">Open in Outlook</button><button class="btn" data-act="copy" type="button">Copy</button>`
+      : `<button class="btn primary" data-act="addemail" type="button">Add their email</button><button class="btn" data-act="copy" type="button">Copy</button>`;
+  } else if (s.type === "call") {
+    fields = `${phone ? `<a class="phone" href="tel:${esc(phone)}">${icon("call")}${esc(phone)}</a>` : `<p class="muted">No phone number saved. Add one with Edit details.</p>`}
+      ${body("Talking points", "short", "What to say or ask")}
+      <div class="lbl" id="${id("out")}">What happened?</div>
+      <div class="chips" role="group" aria-labelledby="${id("out")}">${CALL_LOG.map(([v, l]) =>
+        `<button class="chip" type="button" data-outcome="${v}" aria-pressed="false">${l}</button>`).join("")}</div>
+      ${lab("note", "Note (optional)")}<input id="${id("note")}" data-s="note" placeholder="Wants a demo Tuesday" enterkeyhint="done">`;
+    actions = `<button class="btn primary" data-act="logcall" type="button">Log call</button>`;
+  } else if (s.type === "text") {
+    fields = `<p class="to"><span class="muted">To</span> ${phone ? esc(phone) : `<span class="muted">no number saved</span>`}</p>${body("Message", "short")}`;
+    actions = `<button class="btn primary" data-act="done" type="button">Mark sent</button>
+      ${phone ? `<a class="btn" data-act="sms" href="sms:${esc(phone)}">Open Messages</a>` : ""}<button class="btn" data-act="copy" type="button">Copy</button>`;
+  } else if (s.type === "linkedin") {
+    fields = body("Message", "short");
+    actions = `<button class="btn primary" data-act="done" type="button">Mark sent</button><button class="btn" data-act="copy" type="button">Copy</button>`;
+  } else if (s.type === "close") {
+    fields = body("Reason", "short", "No response after two emails and two calls");
+    actions = `<button class="btn primary" data-act="done" type="button">Close as ${esc(closed)}</button>`;
+  } else {
+    fields = body("Notes", "short");
+    actions = `<button class="btn primary" data-act="done" type="button">Mark done</button>`;
+  }
+  return `${fields}
+    <div class="acts row">${s.status === "paused" ? `<button class="btn primary" data-act="resume" type="button">Resume</button>` : actions}
+      <span class="saved" aria-live="polite"></span></div>
+    <details class="stepedit"><summary>Edit or skip this step</summary>
+      <div class="grid2"><div>${lab("type", "Type")}${typeSel}</div><div>${lab("due", "Due")}<input type="date" id="${id("due")}" data-s="due" value="${esc(draft(s, "due") || "")}"></div></div>
+      ${lab("title", "Step name")}<input id="${id("title")}" data-s="title" value="${esc(draft(s, "title"))}" placeholder="${esc(TYPES[s.type])}">
+      <div class="row">${s.status === "paused" ? "" : `<button class="btn sm" data-act="skip" type="button">Skip this step</button>`}
+        <button class="btn sm danger" data-act="remove" type="button">Remove step</button></div></details>`;
+}
+function stepLabel(s) { return s.title || (s.type === "email" && s.subject ? `Email: ${s.subject}` : TYPES[s.type]); }
+
+async function openContact(id) {
+  const c = await api(`/api/contacts/${id}`);
+  const ws = curWs(), d = $("#drawer"), wasOpen = d.classList.contains("open");
+  const fresh = state.openFor !== c.id || !wasOpen;
+  if (state.openFor !== c.id) { state.open = new Set(); state.openFor = c.id; }
+  if (!wasOpen) state.returnFocus = document.activeElement;
+  const keep = fresh ? 0 : $("#dbody")?.scrollTop || 0;
+  const done = c.steps.filter(s => s.status === "done" || s.status === "skipped");
+  const planned = c.steps.filter(s => s.status === "planned");
+  const paused = c.steps.filter(s => s.status === "paused");
+  if (planned[0] && !state.open.size) state.open.add(planned[0].id);
+  const cur = planned[0];
+  const shownPhone = cur && ["call", "text"].includes(cur.type) ? (cur.type === "text" ? c.mobile || c.phone : c.phone || c.mobile) : "";
+
+  // where they stand: stage, how long since you last reached them, what happened last
+  const st = stageInfo()[c.stage] || {};
+  const n = daysSince(state.board.contacts.find(x => x.id === c.id)?.last_touch);
+  const warm = st.hot || st.kind === "won";
+  const contacted = n == null ? "Not contacted yet" : n === 0 ? "Contacted today" : n === 1 ? "Contacted yesterday" : `Contacted ${n} days ago`;
+  const status = `<div class="status">${stagePill(c)}${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}
+    <span class="${warm && (n == null || n >= 7) ? "cold" : "muted"}">${contacted}</span></div>`;
+  const recent = c.touches.slice(0, 2);
+
+  const stepCard = (s, isCur) => {
+    const open = state.open.has(s.id);
+    return `<div class="stp${isCur ? " cur" : ""}" data-step="${s.id}">
+      <button class="h" type="button" aria-expanded="${open}" aria-controls="sb${s.id}"${isCur ? ' aria-current="step"' : ""}>${icon(s.type)}
+        <span class="t">${esc(stepLabel(s))}</span>${isCur ? `<span class="pill blue">Next</span>` : ""}${s.status === "paused" ? `<span class="pill">Paused</span>` : duePill(s.due)}</button>
+      <div class="b" id="sb${s.id}"${open ? "" : " hidden"}>${stepBody(s, c)}</div></div>`;
+  };
+  const strategies = state.board.strategies;
+  d.innerHTML = `<div class="dhead"><h2 class="name" id="dname" tabindex="-1">${esc(c.person || c.company)}</h2>
+      <button class="x" id="close" type="button" aria-label="Close">${icon("x")}</button></div>
+    <div class="dbody" id="dbody">
+    <div class="sub">${esc(c.role && c.person ? `${c.role} at ${c.company}` : c.role || (c.person ? c.company : ""))}
+      <button class="link" id="edit" type="button">Edit details</button></div>
+    ${status}
+    ${recent.length ? `<ul class="timeline recent">${recent.map(touchItem).join("")}</ul>` : ""}
+    <div id="details">${detailsView(c, shownPhone)}</div>
+    <h2>Steps</h2>
+    ${done.map(s => `<div class="donel">${icon("done")}<span class="t">${esc(stepLabel(s))}</span><span class="dt">${fmt(s.done_at)}</span>
+      ${s.status === "skipped" || s.outcome ? `<span class="o">${s.status === "skipped" ? "Skipped" : esc(s.outcome)}</span>` : ""}</div>`).join("")}
+    ${planned.map((s, i) => stepCard(s, i === 0)).join("")}
+    ${!planned.length ? `<div class="empty">No next step planned${paused.length ? ". The strategy is paused because they're warm. Add a step or resume one below." : "."}</div>` : ""}
+    ${paused.length ? `<h3 class="sh">Paused</h3><p class="muted note">Strategy steps pause once someone is warm, so nothing automatic goes out. Resume one when it fits.</p>${paused.map(s => stepCard(s, false)).join("")}` : ""}
+    <div class="row"><label class="vh" for="newType">Type of step to add</label><select id="newType" class="pick auto">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+      <button class="btn" id="addStep" type="button">Add step</button></div>
+    <h2>Stage and strategy</h2>
+    <div class="grid2">
+      <div><label for="stage">Stage</label><select id="stage" class="pick">${ws.stages.map(s => `<option ${s.name === c.stage ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
+      <div><label for="strategy">Strategy</label><select id="strategy" class="pick"><option value="">None</option>${strategies.map(s =>
+        `<option value="${s.id}" ${s.id === c.strategy_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div></div>
+    <h2>Log something else</h2>
+    <div class="logrow"><label class="vh" for="kind">What kind</label><select id="kind" class="pick auto">
+      ${["note", "reply", "email", "call", "voicemail", "text", "linkedin", "meeting"].map(k => `<option value="${k}">${kindLabel(k)}</option>`).join("")}</select></div>
+    <label class="vh" for="summary">What happened</label><textarea id="summary" class="short" placeholder="What happened, like: they emailed back asking for pricing"></textarea>
+    <div class="row"><button class="btn" id="log" type="button">Log it</button></div>
+    <details class="fold"><summary>Full timeline (${c.touches.length})</summary>
+      <ul class="timeline">${c.touches.map(touchItem).join("") || `<li>No history yet.</li>`}</ul></details></div>`;
+  d.classList.add("open"); $("#scrim").classList.add("open");
+  $("#dbody").scrollTop = keep;
+  if (fresh) $("#dname").focus({ preventScroll: true });
+  $("#close").onclick = closeDrawer;
+  const showDetails = (editing, focus = "e-person") => {
+    $("#details").innerHTML = editing ? detailsForm(c) : detailsView(c, shownPhone);
+    $("#edit").hidden = editing;
+    if (!editing) return;
+    $("#" + focus).focus();
+    $("#cancelDetails").onclick = () => showDetails(false);
+    $("#saveDetails").onclick = async () => {
+      const body = { custom: {} };
+      d.querySelectorAll("[data-e]").forEach(i => body[i.dataset.e] = i.value.trim());
+      d.querySelectorAll("[data-custom]").forEach(i => body.custom[i.dataset.custom] = i.value.trim());
+      body.notes = $("#e-notes").value.trim();
+      if (!body.company) { toast("Company is required"); return $("#e-company").focus(); }
+      await api(`/api/contacts/${id}`, { method: "PATCH", body }); toast("Details saved"); refresh(id);
+    };
+  };
+  $("#edit").onclick = () => showDetails(true);
+  $("#stage").onchange = async e => { await api(`/api/contacts/${id}/stage`, { method: "POST", body: { stage: e.target.value } }); toast(`Moved to ${e.target.value}`); refresh(id); };
+  $("#strategy").onchange = async e => {
+    const name = e.target.selectedOptions[0].text;
+    const ok = confirm(e.target.value ? `Put ${c.person || c.company} on ${name}? Their planned strategy steps get replaced, starting today. Done steps and steps you added stay.`
+      : `Take ${c.person || c.company} off their strategy? Planned strategy steps are removed. Done steps and steps you added stay.`);
+    if (!ok) { e.target.value = c.strategy_id || ""; return; }
+    state.open = new Set();
+    await api(`/api/contacts/${id}/strategy`, { method: "POST", body: { strategy: e.target.value ? Number(e.target.value) : null } });
+    toast(e.target.value ? `On ${name}` : "Strategy removed"); refresh(id);
+  };
+  $("#addStep").onclick = async () => {
+    const s = await api(`/api/contacts/${id}/steps`, { method: "POST", body: { type: $("#newType").value, due: today() } });
+    state.open.add(s.id); toast("Step added"); refresh(id);
+  };
+  $("#log").onclick = async () => { const s = $("#summary").value.trim(); if (!s) { toast("Write what happened first"); return $("#summary").focus(); }
+    await api(`/api/contacts/${id}/touch`, { method: "POST", body: { kind: $("#kind").value, summary: s } }); $("#summary").value = ""; toast("Logged"); refresh(id); };
+
+  d.querySelectorAll(".stp").forEach(card => {
+    const sid = Number(card.dataset.step), s = c.steps.find(x => x.id === sid);
+    const head = card.querySelector(".h"), bodyEl = card.querySelector(".b");
+    // open and close in place, so nothing typed in another step is lost
+    head.onclick = () => {
+      const open = bodyEl.hidden;
+      bodyEl.hidden = !open; head.setAttribute("aria-expanded", String(open));
+      open ? state.open.add(sid) : state.open.delete(sid);
+    };
+    const val = k => card.querySelector(`[data-s="${k}"]`)?.value ?? "";
+    card.querySelectorAll('[data-s="subject"], [data-s="body"], [data-s="title"]').forEach(el => el.oninput = () => {
+      queueSave(sid, el.dataset.s, el.value);
+      if (el.dataset.s === "title") head.querySelector(".t").textContent = el.value || stepLabel({ ...s, title: "" });
+    });
+    // a new type or due date changes the form and the order, so save and redraw
+    card.querySelectorAll('[data-s="type"], [data-s="due"]').forEach(el => el.onchange = async () => {
+      queueSave(sid, el.dataset.s, el.value); await flushStep(sid); refresh(id);
+    });
+    let outcome = "";
+    card.querySelectorAll(".chip").forEach(ch => ch.onclick = () => {
+      outcome = ch.dataset.outcome;
+      card.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", String(x === ch)));
+    });
+    const noteEl = card.querySelector('[data-s="note"]');
+    if (noteEl) noteEl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); card.querySelector('[data-act="logcall"]').click(); } };
+    const finish = async (o, note, msg) => {
+      await flushStep(sid);
+      const r = await api(`/api/steps/${sid}/done`, { method: "POST", body: { outcome: o, note } });
+      state.open = new Set(r.after_call_step ? [r.after_call_step] : []);
+      toast(r.stage !== c.stage ? `${msg}, moved to ${r.stage}` : msg); refresh(id);
+    };
+    card.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === "outlook") {  // the Outlook app on the Mac; on the phone, the phone's mail app
+        await flushStep(sid);
+        const mail = { to: c.email, subject: val("subject"), body: val("body") };
+        const r = await api("/api/compose", { method: "POST", body: mail }).catch(() => ({}));
+        if (r.opened) toast("Opened in Outlook. Come back and tap Mark sent once it's gone");
+        else location.href = `mailto:${mail.to}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`;
+      }
+      else if (act === "copy") { const text = s.type === "email" ? `${val("subject")}\n\n${val("body")}`.trim() : val("body"); await navigator.clipboard.writeText(text); toast("Copied"); }
+      else if (act === "sms") flushStep(sid);
+      else if (act === "addemail") showDetails(true, "e-email");
+      else if (act === "done") await finish("", "", s.type === "close" ? "Closed" : s.type === "email" ? "Marked sent" : "Done");
+      else if (act === "logcall") {
+        if (!outcome) { toast("Pick what happened first"); return card.querySelector(".chip").focus(); }
+        await finish(outcome, val("note").trim(), "Call logged");
+      }
+      else if (act === "resume") { await flushStep(sid); await api(`/api/steps/${sid}`, { method: "PATCH", body: { status: "planned" } }); toast("Resumed"); refresh(id); }
+      else if (act === "skip") { if (!confirm("Skip this step? It moves to done as skipped and the next one becomes current.")) return;
+        await flushStep(sid); await api(`/api/steps/${sid}/skip`, { method: "POST" }); state.open.delete(sid); toast("Skipped"); refresh(id); }
+      else if (act === "remove") { if (!confirm("Remove this planned step?")) return; pendingSaves.delete(sid); await api(`/api/steps/${sid}`, { method: "DELETE" }); toast("Removed"); refresh(id); }
+    });
+  });
+}
+async function refresh(id) { await flushAll(); await load(); openContact(id); }
+async function closeDrawer() {
+  const d = $("#drawer");
+  if (!d.classList.contains("open")) return;
+  if ($("#summary")?.value.trim() && !confirm("What you wrote under Log something else isn't logged yet. Close and drop it?")) return;
+  await flushAll();
+  d.classList.remove("open"); $("#scrim").classList.remove("open"); state.openFor = null;
+  if (state.returnFocus?.isConnected) state.returnFocus.focus({ preventScroll: true });
+  state.returnFocus = null;
+}
+
+function addForm() {
+  const ws = curWs(), d = $("#drawer"), strategies = state.board.strategies;
+  if (!d.classList.contains("open")) state.returnFocus = document.activeElement;
+  d.innerHTML = `<div class="dhead"><h2 class="name" id="dname" tabindex="-1">Add person</h2>
+      <button class="x" id="close" type="button" aria-label="Close">${icon("x")}</button></div>
+    <div class="dbody"><div class="box">${["company", "person", "role", "email", "phone"].map(f =>
+      `<label for="f-${f}">${f === "company" ? "Company (required)" : f[0].toUpperCase() + f.slice(1)}</label><input id="f-${f}">`).join("")}
+      <label for="f-stage">Stage</label><select id="f-stage">${ws.stages.map(s => `<option>${esc(s.name)}</option>`).join("")}</select>
+      ${strategies.length ? `<label for="f-strategy">Strategy</label><select id="f-strategy">${strategies.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}
+        <option value="">None</option></select>` : ""}
+      <div class="row"><button class="btn primary" id="create" type="button">Add</button></div></div></div>`;
+  d.classList.add("open"); $("#scrim").classList.add("open");
+  $("#close").onclick = closeDrawer;
+  $("#f-company").focus();
+  $("#create").onclick = async () => {
+    const body = { workspace: state.ws, stage: $("#f-stage").value, strategy: $("#f-strategy") ? Number($("#f-strategy").value) || null : null };
+    ["company", "person", "role", "email", "phone"].forEach(f => body[f] = $(`#f-${f}`).value.trim());
+    if (!body.company) { toast("Company is required"); return $("#f-company").focus(); }
+    const c = await api("/api/contacts", { method: "POST", body }); await load(); openContact(c.id);
+  };
+}
+
+document.addEventListener("click", async e => {
+  if (e.target.closest("a")) return;
+  const em = e.target.closest("[data-email]");
+  if (em) return openEmail(em.dataset.email, em.dataset.sid);
+  const opener = e.target.closest("[data-open]");
+  if (opener) return openContact(opener.dataset.open);
+  const wt = e.target.closest("[data-warmtab]");
+  if (wt) { state.warmTab = wt.dataset.warmtab; try { localStorage.setItem("crm.warmTab", state.warmTab); } catch (e) {} render(); return $(`#wt-${state.warmTab}`)?.focus(); }
+  const pick = e.target.closest("[data-pick]");
+  if (pick) {  // choose an outcome in place, so the note and scroll stay put
+    state.pick = pick.dataset.pick;
+    document.querySelectorAll("[data-pick]").forEach(b => b.setAttribute("aria-pressed", String(b === pick)));
+    $("#logNext").disabled = false; return $("#logNext").focus();
+  }
+  if (e.target.id === "logNext") return logSessionCall();
+  if (e.target.id === "skipCall") {
+    const ses = loadSession(), cid = Number($(".now[data-cid]").dataset.cid);
+    ses.skipped = [...ses.skipped.filter(x => x !== cid), cid]; saveSession(); state.pick = ""; state.pickNote = ""; return render();
+  }
+  const undo = e.target.closest("[data-undo]");
+  if (undo) return undoSessionCall(Number(undo.dataset.undo));
+  const co = e.target.closest("[data-company]");
+  if (co) { $("#q").value = co.dataset.company; state.view = "all"; state.f = noFilters(); savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return load(); }
+  if (e.target.closest("[data-allemails]")) { state.allEmails = true; return render(); }
+  const go = e.target.closest("[data-stagego]");
+  if (go) { state.f = { ...noFilters(), stage: go.dataset.stagego }; state.view = "all"; savePrefs(); return render(); }
+  const el = !e.target.closest("select, input, textarea, button") && e.target.closest("[data-id]");
+  if (el && !e.target.closest(".drawer")) return openContact(el.dataset.id);
+  const tab = e.target.closest("#tabs button");
+  if (tab) { state.view = tab.dataset.v; state.stratOpen = null; try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
+  if (e.target.id === "retry") return load();
+  if (e.target.id === "clearF") { state.f = noFilters(); savePrefs(); return render(); }
+  const th = e.target.closest("th[data-sort]");
+  if (th) { const k = th.dataset.sort; state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: k === "updated" ? -1 : 1 }; savePrefs(); return render(); }
+  // strategies: open a box, go back, edit
+  const box = e.target.closest("[data-strat]");
+  if (box) { state.view = "strategies"; state.stratOpen = Number(box.dataset.strat); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
+  if (e.target.closest("[data-stratedit]")) {
+    $("#stratEdit").innerHTML = stratCard(state.board.strategies.find(s => s.id === state.stratOpen));
+    return $("#stratEdit .name").focus();
+  }
+  const card = e.target.closest(".strat");
+  if (e.target.id === "newStrat") { state.stratOpen = "new"; return render(); }
+  if (e.target.id === "acSave") {
+    const w = await api(`/api/workspaces/${state.ws}/after-call`, { method: "PUT", body: { subject: $("#acSubject").value, body: $("#acBody").value } });
+    curWs().after_call = w.after_call; return toast("Template saved");
+  }
+  else if (card && e.target.closest("[data-addstep]")) {
+    const last = [...card.querySelectorAll('[data-k="day"]')].pop();
+    card.querySelector(".ssteps").insertAdjacentHTML("beforeend", stratStep({ type: "call", day: (Number(last?.value) || 0) + 2 }));
+  }
+  else if (card && e.target.closest("[data-rm]")) e.target.closest(".srow").remove();
+  else if (card && e.target.closest("[data-savestrat]")) {
+    const s = readStrat(card);
+    if (!s.name) return toast("Give the strategy a name");
+    if (!s.steps.length) return toast("Add at least one step");
+    const saved = await api("/api/strategies", { method: "POST", body: s }); toast("Strategy saved");
+    state.stratOpen = saved.id; load();
+  }
+  else if (card && e.target.closest("[data-delstrat]")) {
+    if (!confirm("Delete this strategy? No one follows it, so nothing else changes.")) return;
+    await api(`/api/strategies/${card.dataset.sid}`, { method: "DELETE" }); toast("Strategy deleted"); state.stratOpen = null; load();
+  }
+});
+document.addEventListener("input", e => { if (e.target.id === "callNote") state.pickNote = e.target.value; });
+document.addEventListener("change", e => {
+  if (e.target.id === "stratPick") { const v = e.target.value; state.stratOpen = v === "new" ? "new" : v ? Number(v) : null; return render(); }
+  const k = e.target.dataset?.f;
+  if (k) { if (k.startsWith("c:")) state.f.custom[k.slice(2)] = e.target.value; else state.f[k] = e.target.value; savePrefs(); return render(); }
+  if (e.target.closest(".srow") && e.target.dataset.k === "type") {  // show the subject box only for emails
+    const r = e.target.closest(".srow"), email = e.target.value === "email";
+    r.querySelector('[data-k="subject"]').hidden = !email;
+    r.querySelector('[data-k="body"]').placeholder = email ? "Message template (optional)" : "Notes or talking points (optional)";
+  }
+});
+$("#scrim").onclick = closeDrawer;
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeDrawer();
+  if (e.key === "Enter" && e.target.id === "callNote") logSessionCall();
+  const tabs = e.target.closest('[role="tablist"]');
+  if (tabs && ["ArrowRight", "ArrowLeft"].includes(e.key)) {  // arrow keys move between the warm tabs
+    const all = [...tabs.querySelectorAll("[data-warmtab]")], i = all.findIndex(b => b.getAttribute("aria-selected") === "true");
+    all[(i + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length].click();
+  }
+});
+$("#add").onclick = addForm;
+let timer; $("#q").oninput = () => { clearTimeout(timer); timer = setTimeout(load, 200); };
+$("#ws").onchange = e => { state.ws = e.target.value; try { localStorage.setItem("crm.ws", state.ws); } catch (e) {} loadPrefs(); load(); };
+window.addEventListener("focus", () => state.ws && state.view !== "strategies" && !$("#drawer").classList.contains("open") && load());
+
+(async () => {
+  state.workspaces = await api("/api/workspaces");
+  let saved; try { saved = localStorage.getItem("crm.ws"); } catch (e) {}
+  state.ws = state.workspaces.some(w => w.slug === saved) ? saved : state.workspaces[0]?.slug;
+  $("#ws").innerHTML = state.workspaces.map(w => `<option value="${w.slug}">${esc(w.name)}</option>`).join("");
+  $("#ws").value = state.ws;
+  if (state.ws) { loadPrefs(); load(); } else $("#main").innerHTML = `<div class="empty">No workspace yet. Ask Claude to set one up.</div>`;
+})();
+</script>
+</body>
+</html>

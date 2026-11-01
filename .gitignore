@@ -1,0 +1,8 @@
+.venv/
+data/
+__pycache__/
+.hallmark/
+.claude/settings.local.json
+samples/
+.impeccable/critique/
+seed_next_steps.py
