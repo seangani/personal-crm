@@ -929,7 +929,7 @@ def overview(con, workspace, query=""):
     """Everything the home screen needs: contacts with their current step and progress, plus stats."""
     contacts = find_contacts(con, workspace, query, limit=5000)
     ids = [c["id"] for c in contacts]
-    prog, cur, last, said = {}, {}, {}, {}
+    prog, cur, last, said, upd = {}, {}, {}, {}, {}
     if ids:
         marks = ",".join("?" * len(ids))
         for r in con.execute(f"SELECT contact_id, sum(status = 'done') AS done, sum(status = 'planned') AS planned, "
@@ -950,11 +950,14 @@ def overview(con, workspace, query=""):
                              f"ORDER BY at, id", ids):
             said[r["contact_id"]] = r
         last = {k: v["at"] for k, v in said.items()}
+        # the latest update of any kind (a call, a note, a stage move), for the Needs updates list
+        upd = dict(con.execute(f"SELECT contact_id, max(at) FROM touches WHERE contact_id IN ({marks}) GROUP BY contact_id", ids).fetchall())
     kinds = _kinds(con, contacts[0]["workspace"]) if contacts else {}
     for c in contacts:
         c["stale_days"] = stale_days(c, kinds)
         c["progress"] = prog.get(c["id"], {"done": 0, "planned": 0, "paused": 0, "skipped": 0}) | {"steps": path.get(c["id"], [])}
         c["last_touch"] = last.get(c["id"])
+        c["last_update"] = upd.get(c["id"])
         c["last_said"] = said[c["id"]]["summary"] if c["id"] in said else ""
         s = cur.get(c["id"])
         c["current"] = {k: s[k] for k in ("id", "type", "due", "subject", "weekend")} | {"label": step_label(s)} if s else None

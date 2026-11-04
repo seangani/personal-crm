@@ -185,6 +185,9 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .nxo > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wmeta { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; padding-left: 28px; color: var(--muted); }
 .wmeta .ask { color: var(--ink); }
+.hacts { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 4px; color: var(--muted); }
+.hacts .tel { display: inline-flex; gap: 4px; align-items: center; }
+.wrow.held { opacity: 0.55; }
 .tag { display: inline-flex; gap: 4px; align-items: center; font-size: var(--text-sm); padding: 2px 8px; min-height: 28px; border: 0; border-radius: 6px; background: var(--soft);
   color: var(--ink); cursor: pointer; max-width: 100%; }
 .tag > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -611,17 +614,49 @@ const companyTag = c => `<button class="tag" type="button" data-company="${esc(c
 const placeOf = c => c.location ? `<span class="place">${icon("pin")}${esc(c.location)}</span>` : "";
 
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
-function warmRow(c) {
+function warmRow(c, extra = "", dim = false) {
   const said = c.last_said && !/^Strategy:/.test(c.last_said) ? c.last_said : "";
   const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
-  return `<div class="wrow" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
-    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}</div></div>`;
+  return `<div class="wrow${dim ? " held" : ""}" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
+    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
 }
-function warmPanel(list) {
+// Super hot: people who said they're interested (Interested and every stage after it, or Priority FOCUS or HOT).
+// Needs updates: everyone past the cold stages (Reached gatekeeper onward), stalest first. Never won or closed.
+const priorityOf = c => String(c.custom?.Priority || "");
+const isFocus = c => /^focus/i.test(priorityOf(c));
+const isHeld = c => (c.hold_until || "") > today();
+function warmSets(all) {
+  const st = stageInfo(), names = state.board.stages.map(s => s.name);
+  const from = n => { const i = names.indexOf(n); return new Set(i < 0 ? [] : names.slice(i).filter(x => st[x].kind === "active")); };
+  const interested = from("Interested"), past = from("Reached gatekeeper");
+  const live = c => ["open", "active"].includes(st[c.stage]?.kind);
+  const hot = all.filter(c => live(c) && (interested.has(c.stage) || /^(focus|hot)/i.test(priorityOf(c))));
+  const ids = new Set(hot.map(c => c.id));
+  const upd = all.filter(c => live(c) && (ids.has(c.id) || past.has(c.stage) || st[c.stage]?.hot));
+  const held = (a, b) => isHeld(a) - isHeld(b);
+  return {
+    hot: [...hot].sort((a, b) => held(a, b) || isFocus(b) - isFocus(a) || (a.current?.due || "") .localeCompare(b.current?.due || "")),
+    upd: [...upd].sort((a, b) => held(a, b) || (a.last_update || "").localeCompare(b.last_update || "")),
+  };
+}
+const ago = iso => { const n = daysSince(iso); return n == null ? "never" : daysText(n); };
+// a super hot or needs-updates row: the warm row plus their number, how long since the last update, and a Log button
+function hotRow(c) {
+  const ph = phoneOf(c), n = daysSince(c.last_update);
+  const held = isHeld(c) ? `<span class="pill">On hold until ${fmt(c.hold_until)}</span>` : "";
+  const tag = isFocus(c) ? `<span class="pill paid">Focus</span>` : "";
+  return warmRow(c, `<span class="hacts">${tag}${held}<span class="${!isHeld(c) && (n == null || n > 4) ? "cold" : ""}">Updated ${ago(c.last_update)}</span>
+    ${ph ? `<a class="tel" href="tel:${esc(ph)}">${icon("call")}${esc(ph)}</a>` : `<span class="muted">No number</span>`}
+    <button class="btn sm" type="button" data-logfor="${c.id}">Log</button></span>`, isHeld(c));
+}
+function warmPanel(list, all) {
   const t = today(), callNow = c => c.current?.type === "call" && (!c.current.due || c.current.due <= t);
   const byNext = l => [...l].sort((x, y) => (x.current?.due || "") < (y.current?.due || "") ? -1 : 1);  // not scheduled first
+  const sets = warmSets(all);
   const groups = [
+    { key: "hot", name: "Super hot", hint: "They said they're interested: Interested or further along, or Priority FOCUS or HOT. Chase them constantly. Focus first.", list: sets.hot, row: hotRow },
+    { key: "upd", name: "Needs updates", hint: "Everyone past the cold stages, the person you haven't updated longest at the top. Log anything and they drop to the bottom.", list: sets.upd, row: hotRow },
     { key: "call", name: "Call today", hint: "Warm people with a call due today or earlier.", list: byDue(list.filter(callNow)) },
     { key: "follow", name: "Follow up", hint: "Every other warm lead, by when you next reach out. Anyone with nothing scheduled is at the top.",
       list: byNext(list.filter(c => !callNow(c))) },
@@ -631,7 +666,7 @@ function warmPanel(list) {
       `<button class="tab" role="tab" type="button" id="wt-${g.key}" data-warmtab="${g.key}" aria-selected="${g === on}" aria-controls="wp" tabindex="${g === on ? 0 : -1}">
         <b>${g.list.length}</b><span>${g.name}</span></button>`).join("")}</div>
     <div class="tabpanel" role="tabpanel" id="wp" aria-labelledby="wt-${on.key}"><p class="hint">${on.hint}</p>
-      ${on.list.length ? on.list.map(warmRow).join("") : `<div class="empty">No one here right now.</div>`}</div></div>`;
+      ${on.list.length ? on.list.map(c => (on.row || warmRow)(c)).join("") : `<div class="empty">No one here right now.</div>`}</div></div>`;
 }
 
 // the calling session: one call at a time, what's next, and what you've logged today (kept for the day)
@@ -725,7 +760,7 @@ function renderOverview() {
   const strip = `<div class="strip"><div class="hotn${has(warm.length)}"><b>${warm.length}</b><span>warm</span></div>
     <div><b>${interested}</b><span>interested or further</span></div><div class="paidn${has(paid)}"><b>${paid}</b><span>at a paid stage</span></div>
     <div><b>${dead}</b><span>dead</span></div><button class="stuckn${has(stuck)}" type="button" data-stuckgo title="See everyone stuck in one stage over 4 days"><b>${stuck}</b><span>stuck over 4 days</span></button><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
-  const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm)}</div>`;
+  const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm, list)}</div>`;
   const sat = weekendOf(t), sun = new Date(new Date(sat + "T12:00").getTime() + 864e5).toLocaleDateString("en-CA");
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
@@ -1176,6 +1211,8 @@ document.addEventListener("click", async e => {
   if (e.target.closest("a")) return;
   const em = e.target.closest("[data-email]");
   if (em) return openEmail(em.dataset.email, em.dataset.sid);
+  const lf = e.target.closest("[data-logfor]");
+  if (lf) { await openContact(lf.dataset.logfor); const s = $("#summary"); s?.scrollIntoView({ block: "center" }); return s?.focus({ preventScroll: true }); }
   const opener = e.target.closest("[data-open]");
   if (opener) return openContact(opener.dataset.open);
   const wt = e.target.closest("[data-warmtab]");

@@ -281,7 +281,7 @@ async def api_after_call(request):
 @_safe
 async def api_board(request):
     r = _with(db.overview, request.query_params["workspace"], request.query_params.get("q", ""))
-    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_said", "mobile", "notes")}
+    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_said", "mobile", "notes")}
                      for c in r["contacts"]]
     return r
 
