@@ -51,7 +51,8 @@ def _with(fn, *a, **kw):
 
 def _slim(c):
     keep = ("id", "workspace", "company", "person", "role", "email", "phone", "stage", "stage_changed",
-            "strategy", "next_step", "next_due", "next_draft", "custom", "location", "ai_state", "ai_note")
+            "strategy", "next_step", "next_due", "next_draft", "custom", "location", "ai_state", "ai_note",
+            "hold_until", "stale_days")
     return {k: c[k] for k in keep if c.get(k) not in (None, "", {})}
 
 
@@ -94,10 +95,14 @@ def add_contact(workspace: str, company: str, person: str = "", role: str = "", 
 @mcp.tool()
 def update_contact(contact_id: int, company: str = "", person: str = "", role: str = "", email: str = "",
                    phone: str = "", mobile: str = "", website: str = "", notes: str = "",
-                   custom: dict | None = None, location: str = "") -> dict:
-    """Change a contact's details. Only the fields you pass are changed. `custom` merges into custom fields."""
+                   custom: dict | None = None, location: str = "", hold_until: str = "") -> dict:
+    """Change a contact's details. Only the fields you pass are changed. `custom` merges into custom fields.
+    Anyone in one stage over 4 days gets a "stuck" warning. hold_until (YYYY-MM-DD) hides it until that date, for
+    people who asked to be contacted later (e.g. "connect mid-November"); pass "none" to clear the hold."""
     fields = {k: v for k, v in dict(company=company, person=person, role=role, email=email, phone=phone,
                                     mobile=mobile, website=website, notes=notes, location=location).items() if v}
+    if hold_until:
+        fields["hold_until"] = "" if hold_until.lower() == "none" else hold_until
     return _slim(_with(db.update_contact, contact_id, custom=custom or {}, **fields))
 
 
@@ -121,7 +126,8 @@ def set_next_step(contact_id: int, step: str, due: str = "", draft: str = "") ->
 
 @mcp.tool()
 def whats_due(workspace: str = "", through: str = "") -> dict:
-    """Next steps due today or earlier (or through a YYYY-MM-DD date), plus upcoming and undated ones."""
+    """Next steps due today or earlier (or through a YYYY-MM-DD date), plus upcoming and undated ones, plus
+    "stuck": everyone over 4 days in one stage (not won, closed or on hold), longest first."""
     r = _with(db.due, workspace or None, through or None)
     return {k: [_slim(c) for c in v] for k, v in r.items()}
 

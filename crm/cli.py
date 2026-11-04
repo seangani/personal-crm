@@ -9,6 +9,7 @@
     python -m crm.cli log-send --sent-log sent_log.csv --contacts batch.csv --label "Batch 7" [--bump] [--strategy "Email first"]
     python -m crm.cli log-mail --email x@y.com --kind reply|auto|bounce --summary "..." [--at YYYY-MM-DD]
     python -m crm.cli mark-ai --ids 12,40 --state seen|batch|clear [--note "Batch 9, Sat Oct 31"]
+    python -m crm.cli hold <id> YYYY-MM-DD|none   # no "stuck" warning before that date
 
 Prints JSON.
 """
@@ -111,6 +112,7 @@ def main():
     s.add_argument("--summary", default=""); s.add_argument("--at")
     s = sub.add_parser("mark-ai"); s.add_argument("--ids", required=True, help="contact ids, comma separated")
     s.add_argument("--state", required=True, choices=["seen", "batch", "clear"]); s.add_argument("--note", default="")
+    s = sub.add_parser("hold"); s.add_argument("id", type=int); s.add_argument("until", help="YYYY-MM-DD, or none to clear")
     a = p.parse_args()
 
     con = db.connect()
@@ -130,6 +132,8 @@ def main():
         elif a.cmd == "mark-ai":
             state = "" if a.state == "clear" else a.state
             out = [db.mark_ai(con, int(i), state, a.note)["id"] for i in a.ids.split(",") if i.strip()]
+        elif a.cmd == "hold":
+            out = db.update_contact(con, a.id, hold_until="" if a.until.lower() == "none" else a.until)
         elif a.cmd == "log-send":
             out = log_send(con, a.workspace, a.sent_log, a.contacts, a.label, a.bump, a.strategy)
         else:

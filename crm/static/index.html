@@ -90,6 +90,8 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .co { color: var(--muted); margin-left: 8px; }
 .pill { font-size: var(--text-xs); padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--muted); white-space: nowrap; }
 .pill.late { background: var(--warn-bg); color: var(--warn); }
+.pill.stuck { display: inline-flex; gap: 4px; align-items: center; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.pill.stuck .i { width: 12px; height: 12px; }
 .pill.hot { background: var(--hot-bg); color: var(--hot); }
 .pill.blue { background: var(--soft); color: var(--ink); }
 .date { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -149,6 +151,8 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .strip div { display: flex; gap: 8px; align-items: baseline; }
 .strip b { font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
 .strip span { color: var(--muted); font-size: var(--text-sm); }
+.strip .stuckn { display: flex; gap: 8px; align-items: baseline; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.strip .stuckn:hover span { color: var(--ink); text-decoration: underline; } .strip .stuckn.has b { color: var(--warn); }
 .strip .hotn.has b { color: var(--hot); } .strip .paidn.has b { color: var(--ok); }
 .ai { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ai); flex: none; }
 .ai .i { width: 14px; height: 14px; }
@@ -298,7 +302,8 @@ textarea.short { min-height: 72px; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .logrow { margin-bottom: 8px; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; }
-.drawer select.pick { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.drawer select.pick, .drawer input.pick { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.drawer input.pick { color: var(--ink); color-scheme: light dark; }
 .drawer select.pick.auto { width: auto; }
 .drawer h3.sh { font-size: var(--text-md); font-weight: 600; margin: 24px 0 0; }
 .stp { border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; }
@@ -355,7 +360,7 @@ textarea.short { min-height: 72px; }
   .seq li { grid-template-columns: 56px minmax(0, 1fr); } .seq .counts { grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 16px; }
   .wrow { grid-template-columns: minmax(0, 1fr) auto; } .wnext { grid-column: 1 / -1; justify-self: stretch; } .nxo { display: flex; max-width: 100%; } .wmeta { padding-left: 0; }
   .session { grid-template-columns: minmax(0, 1fr); } .now { padding: 16px; } .tab { min-width: 108px; padding: 12px; } .tabpanel { padding: 4px 12px 12px; }
-  .btn, input.callnote, .filters select, nav button, input.search, .drawer select.pick, .box input, .stp input, .stp select, .btn.sm { min-height: 44px; }
+  .btn, input.callnote, .filters select, nav button, input.search, .drawer select.pick, .drawer input.pick, .box input, .stp input, .stp select, .btn.sm { min-height: 44px; }
   input, select, textarea { font-size: 16px; }
   .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 12px 16px; }
   .fstage { padding: 12px 16px; }
@@ -407,11 +412,12 @@ const ICONS = {
   x: '<path d="M6 6l12 12M18 6l-12 12"/>',
   ai: '<path d="M12 3l1.9 5.1l5.1 1.9l-5.1 1.9l-1.9 5.1l-1.9 -5.1l-5.1 -1.9l5.1 -1.9z"/><path d="M18 15l.8 2.2l2.2 .8l-2.2 .8l-.8 2.2l-.8 -2.2l-2.2 -.8l2.2 -.8z"/>',
   building: '<path d="M4 21v-15a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v15"/><path d="M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 8h4M8 12h4M8 16h4"/>',
+  alert: '<path d="M12 4l9 16h-18z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
   pin: '<path d="M12 21s-6 -5.4 -6 -10.5a6 6 0 1 1 12 0c0 5.1 -6 10.5 -6 10.5z"/><circle cx="12" cy="10.5" r="2"/>',
 };
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ICONS.task}</svg>`;
 const TYPES = { email: "Email", call: "Call", text: "Text", linkedin: "LinkedIn", meeting: "Meeting", task: "To do", close: "Close if no reply" };
-const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"]];
+const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"], ["stuck", "Stuck over 4 days"]];
 const noFilters = () => ({ stage: "", due: "", strategy: "", custom: {} });
 
 let state = { ws: null, view: "overview", board: null, workspaces: [], f: noFilters(), sort: { key: "updated", dir: -1 },
@@ -473,6 +479,7 @@ function filtered(skipStage, skipDue) {
       if (f.due === "now" && !(c.next_step && d && d <= t)) return false;
       if (f.due === "week" && !(c.next_step && d && d <= week)) return false;
       if (f.due === "none" && c.next_step) return false;
+      if (f.due === "stuck" && !c.stale_days) return false;
     }
     return true;
   });
@@ -544,19 +551,23 @@ function stageClass(name) {
   return s.paid ? "paid" : s.hot ? "hot" : s.kind === "closed" ? "dead" : s.kind === "active" ? "blue" : "";
 }
 function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(c.stage)}</span>`; }
+// Sean's rule: nobody sits in one stage over 4 days. The server works it out (won, closed and held people never get it)
+const stuckTag = (c, long) => c.stale_days ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
+  ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
 const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
   ["call_back", "Call back later"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"]];
 function row(c) {
   return `<div class="ov-row" data-id="${c.id}">
     <div class="who">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>
-    <div class="stg">${stagePill(c)}</div>${dots(c)}<div class="nx">${nextText(c)}</div>
+    <div class="stg">${stagePill(c)}${stuckTag(c)}</div>${dots(c)}<div class="nx">${nextText(c)}</div>
     <div class="due">${c.current ? duePill(c.current.due) : ""}</div></div>`;
 }
 const byDue = list => [...list].sort((a, b) => (a.current?.due || "9") < (b.current?.due || "9") ? -1 : 1);
 
+let lastBoard = "";
 async function load() {
   const q = encodeURIComponent($("#q").value.trim());
-  try { state.board = await api(`/api/board?workspace=${state.ws}&q=${q}`); }
+  try { state.board = await api(`/api/board?workspace=${state.ws}&q=${q}`); lastBoard = JSON.stringify(state.board); }
   catch (e) {
     if (!state.board) $("#main").innerHTML = `<div class="empty">The CRM didn't answer, so nothing could load. It usually restarts on its own within a minute.
       <button class="btn" id="retry" type="button">Try again</button></div>`;
@@ -593,7 +604,7 @@ function warmRow(c) {
   const said = c.last_said && !/^Strategy:/.test(c.last_said) ? c.last_said : "";
   const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
-  return `<div class="wrow" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${dots(c)}</div><div class="wnext">${next}</div>
+  return `<div class="wrow" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
     <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}</div></div>`;
 }
 function warmPanel(list) {
@@ -630,7 +641,7 @@ function callSession(calls) {
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
       <div class="sub">${companyTag(c)}${placeOf(c)}</div>
-      <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due)}</div></div>
+      <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due)}</div></div>
       ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
       <div class="lbl" id="whl">What happened?</div>
@@ -691,7 +702,7 @@ function renderOverview() {
   const warm = list.filter(c => st[c.stage]?.hot || kind(c) === "won");
   const has = n => n ? " has" : "";
   const paid = list.filter(c => st[c.stage]?.paid).length, dead = list.filter(c => kind(c) === "closed").length;
-  const interested = list.filter(c => afterNames.has(c.stage)).length;
+  const interested = list.filter(c => afterNames.has(c.stage)).length, stuck = list.filter(c => c.stale_days).length;
   const dueNow = c => !done(c) && c.current?.due && c.current.due <= t;
   // calls and emails are the cold outreach; warm people live in the warm panel with their next outreach
   const cold = c => dueNow(c) && !st[c.stage]?.hot;
@@ -702,7 +713,7 @@ function renderOverview() {
 
   const strip = `<div class="strip"><div class="hotn${has(warm.length)}"><b>${warm.length}</b><span>warm</span></div>
     <div><b>${interested}</b><span>interested or further</span></div><div class="paidn${has(paid)}"><b>${paid}</b><span>at a paid stage</span></div>
-    <div><b>${dead}</b><span>dead</span></div><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
+    <div><b>${dead}</b><span>dead</span></div><button class="stuckn${has(stuck)}" type="button" data-stuckgo title="See everyone stuck in one stage over 4 days"><b>${stuck}</b><span>stuck over 4 days</span></button><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
   const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm)}</div>`;
   const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2></div>${callSession(calls)}</div>`;
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
@@ -732,7 +743,7 @@ function renderBoard() {
       ${cs.slice(0, 150).map(c => `<div class="card" data-id="${c.id}">
         <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due) : ""}</div>
         ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
-        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}</div>`).join("")}
+        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}${stuckTag(c)}</div>`).join("")}
       ${cs.length > 150 ? `<div class="empty">+${cs.length - 150} more, search to narrow</div>` : ""}</div>`;
   }).join("")}</div>`;
 }
@@ -745,7 +756,7 @@ function renderAll() {
   $("#main").innerHTML = filterBar({}, rows.length) + `<table><thead><tr>${th("person", "Person")}${th("company", "Company")}${th("stage", "Stage")}
       ${th("strategy", "Strategy", "hide-sm")}${fields.map(n => th("c:" + n, n, "hide-sm")).join("")}${th("next_step", "Next step", "hide-sm")}
       ${th("next_due", "Due", "hide-sm")}${th("updated", "Last activity", "hide-sm")}</tr></thead>
-    <tbody>${rows.map(c => `<tr data-id="${c.id}"><td><span class="tdwho">${c.ai_state ? aiMark(c) : ""}${esc(c.person)}</span></td><td>${esc(c.company)}</td><td><span class="tdstage">${esc(c.stage)}${dots(c)}</span></td>
+    <tbody>${rows.map(c => `<tr data-id="${c.id}"><td><span class="tdwho">${c.ai_state ? aiMark(c) : ""}${esc(c.person)}</span></td><td>${esc(c.company)}</td><td><span class="tdstage">${esc(c.stage)}${dots(c)}${stuckTag(c)}</span></td>
       <td class="hide-sm">${esc(c.strategy)}</td>${fields.map(n => `<td class="hide-sm">${esc(c.custom?.[n])}</td>`).join("")}
       <td class="hide-sm">${esc(c.next_step)}</td><td class="hide-sm">${fmt(c.next_due)}</td><td class="hide-sm">${fmt(c.updated)}</td></tr>`).join("")
       || `<tr><td colspan="${7 + fields.length}" class="empty">No one matches these filters.</td></tr>`}</tbody></table>`;
@@ -973,7 +984,9 @@ async function openContact(id) {
   const n = daysSince(state.board.contacts.find(x => x.id === c.id)?.last_touch);
   const warm = st.hot || st.kind === "won";
   const contacted = n == null ? "Not contacted yet" : n === 0 ? "Contacted today" : n === 1 ? "Contacted yesterday" : `Contacted ${n} days ago`;
-  const status = `<div class="status">${stagePill(c)}${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}
+  const held = c.hold_until && c.hold_until > today();
+  const status = `<div class="status">${stagePill(c)}${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}${stuckTag(c, true)}
+    ${held ? `<span class="muted">No stuck warning until ${fmt(c.hold_until)}</span>` : ""}
     <span class="${warm && (n == null || n >= 7) ? "cold" : "muted"}">${contacted}</span></div>`;
   const recent = c.touches.slice(0, 2);
 
@@ -1005,7 +1018,9 @@ async function openContact(id) {
     <div class="grid2">
       <div><label for="stage">Stage</label><select id="stage" class="pick">${ws.stages.map(s => `<option ${s.name === c.stage ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
       <div><label for="strategy">Strategy</label><select id="strategy" class="pick"><option value="">None</option>${strategies.map(s =>
-        `<option value="${s.id}" ${s.id === c.strategy_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div></div>
+        `<option value="${s.id}" ${s.id === c.strategy_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
+      <div><label for="hold">Hold the stuck warning until</label><input id="hold" type="date" class="pick" value="${esc(c.hold_until || "")}"></div></div>
+    <p class="muted note">For someone who asked you to reach out later, like mid-November. Leave it empty for no hold.</p>
     <h2>Log something else</h2>
     <div class="logrow"><label class="vh" for="kind">What kind</label><select id="kind" class="pick auto">
       ${["note", "reply", "email", "call", "voicemail", "text", "linkedin", "meeting"].map(k => `<option value="${k}">${kindLabel(k)}</option>`).join("")}</select></div>
@@ -1034,6 +1049,10 @@ async function openContact(id) {
   };
   $("#edit").onclick = () => showDetails(true);
   $("#stage").onchange = async e => { await api(`/api/contacts/${id}/stage`, { method: "POST", body: { stage: e.target.value } }); toast(`Moved to ${e.target.value}`); refresh(id); };
+  $("#hold").onchange = async e => {
+    await api(`/api/contacts/${id}`, { method: "PATCH", body: { hold_until: e.target.value } });
+    toast(e.target.value ? `No stuck warning until ${fmt(e.target.value)}` : "Hold removed"); refresh(id);
+  };
   $("#strategy").onchange = async e => {
     const name = e.target.selectedOptions[0].text;
     const ok = confirm(e.target.value ? `Put ${c.person || c.company} on ${name}? Their planned strategy steps get replaced, starting today. Done steps and steps you added stay.`
@@ -1164,6 +1183,7 @@ document.addEventListener("click", async e => {
   if (e.target.closest("[data-allemails]")) { state.allEmails = true; return render(); }
   const go = e.target.closest("[data-stagego]");
   if (go) { state.f = { ...noFilters(), stage: go.dataset.stagego }; state.view = "all"; savePrefs(); return render(); }
+  if (e.target.closest("[data-stuckgo]")) { state.f = { ...noFilters(), due: "stuck" }; state.view = "all"; savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
   const el = !e.target.closest("select, input, textarea, button") && e.target.closest("[data-id]");
   if (el && !e.target.closest(".drawer")) return openContact(el.dataset.id);
   const tab = e.target.closest("#tabs button");
@@ -1226,7 +1246,25 @@ document.addEventListener("keydown", e => {
 $("#add").onclick = addForm;
 let timer; $("#q").oninput = () => { clearTimeout(timer); timer = setTimeout(load, 200); };
 $("#ws").onchange = e => { state.ws = e.target.value; try { localStorage.setItem("crm.ws", state.ws); } catch (e) {} loadPrefs(); load(); };
-window.addEventListener("focus", () => state.ws && state.view !== "strategies" && !$("#drawer").classList.contains("open") && load());
+// keep the page current when Claude changes things through MCP or the CLI: check on focus, when the tab comes back,
+// and every 30 seconds. Never while you're typing, mid-call or editing a strategy, and only redraw when something changed.
+const typing = () => document.activeElement?.matches("input:not(#q):not([type=date]), textarea, [contenteditable]");
+const busy = () => typing() || state.pick || state.view === "strategies" || pendingSaves.size;
+async function autoRefresh() {
+  if (document.hidden || !state.ws || !state.board || busy()) return;
+  const q = encodeURIComponent($("#q").value.trim());
+  let b; try { const r = await fetch(`/api/board?workspace=${state.ws}&q=${q}`); if (!r.ok) return; b = await r.json(); } catch (e) { return; }
+  const s = JSON.stringify(b);
+  if (s === lastBoard || busy()) return;
+  state.board = b; lastBoard = s;
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+  // the open panel follows too, unless something in it is half done
+  const d = $("#drawer");
+  if (state.openFor && d.classList.contains("open") && d.querySelector("#hold") && !$("#saveDetails") && !$("#summary")?.value.trim()) openContact(state.openFor);
+}
+window.addEventListener("focus", autoRefresh);
+document.addEventListener("visibilitychange", autoRefresh);
+setInterval(autoRefresh, 30000);
 
 (async () => {
   state.workspaces = await api("/api/workspaces");

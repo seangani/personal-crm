@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS contacts (
     location TEXT DEFAULT '',      -- city and state
     ai_state TEXT DEFAULT '',      -- what the outreach chat has done: seen (has a plan) or batch (in the next batch)
     ai_note TEXT DEFAULT '',       -- e.g. "Batch 9, Sat Oct 31"
-    ai_at TEXT
+    ai_at TEXT,
+    hold_until TEXT DEFAULT ''     -- YYYY-MM-DD: no "stuck" warning before this date (e.g. "connect mid-November")
 );
 CREATE INDEX IF NOT EXISTS contacts_ws ON contacts(workspace_id, stage);
 CREATE INDEX IF NOT EXISTS contacts_email ON contacts(email);
@@ -125,7 +126,8 @@ def connect():
         con.execute("ALTER TABLE workspaces ADD COLUMN after_call TEXT DEFAULT ''")
     cols = {r["name"] for r in con.execute("PRAGMA table_info(contacts)")}
     for col, ddl in (("strategy_id", "INTEGER REFERENCES strategies(id)"), ("location", "TEXT DEFAULT ''"),
-                     ("ai_state", "TEXT DEFAULT ''"), ("ai_note", "TEXT DEFAULT ''"), ("ai_at", "TEXT")):
+                     ("ai_state", "TEXT DEFAULT ''"), ("ai_note", "TEXT DEFAULT ''"), ("ai_at", "TEXT"),
+                     ("hold_until", "TEXT DEFAULT ''")):
         if col not in cols:
             con.execute(f"ALTER TABLE contacts ADD COLUMN {col} {ddl}")
             con.commit()
@@ -169,6 +171,27 @@ def _contact_dict(row):
     d = dict(row)
     d["custom"] = json.loads(d["custom"] or "{}")
     return d
+
+
+STALE_DAYS = 4  # Sean's rule: nobody sits in one stage longer than this
+
+
+def stale_days(c, kinds, today=None):
+    """Days someone has sat in their stage when that's over STALE_DAYS, else 0. Finished stages (won, closed)
+    never go stale, and neither does anyone on hold (hold_until in the future)."""
+    today = today or date.today().isoformat()
+    if kinds.get(c["stage"]) in ("won", "closed") or (c.get("hold_until") or "") > today:
+        return 0
+    since = c.get("stage_changed") or (c.get("created") or "")[:10]
+    if not since:
+        return 0
+    n = (date.fromisoformat(today) - date.fromisoformat(since[:10])).days
+    return n if n > STALE_DAYS else 0
+
+
+def _kinds(con, slug):
+    row = con.execute("SELECT stages FROM workspaces WHERE slug = ?", (slug,)).fetchone()
+    return {s["name"]: s["kind"] for s in json.loads(row["stages"])} if row else {}
 
 
 def _workday(d):
@@ -426,6 +449,7 @@ def get_contact(con, contact_id, with_touches=True):
     if not row:
         raise ValueError(f"No contact {contact_id}")
     d = _contact_dict(row)
+    d["stale_days"] = stale_days(d, _kinds(con, d["workspace"]))
     if with_touches:
         d["touches"] = [dict(t) for t in con.execute(
             "SELECT * FROM touches WHERE contact_id = ? ORDER BY at DESC, id DESC", (contact_id,))]
@@ -456,9 +480,15 @@ def add_contact(con, workspace, company, person="", stage=None, source="", strat
 
 
 def update_contact(con, contact_id, **fields):
-    """Change plain fields (person, role, email, phone, mobile, website, notes, company, location) and custom fields."""
+    """Change plain fields (person, role, email, phone, mobile, website, notes, company, location, hold_until) and
+    custom fields. hold_until is a YYYY-MM-DD date that hides the "stuck" warning until then; "" clears it."""
     c = get_contact(con, contact_id, with_touches=False)
-    allowed = {"company", "person", "role", "email", "phone", "mobile", "website", "notes", "source", "location"}
+    allowed = {"company", "person", "role", "email", "phone", "mobile", "website", "notes", "source", "location", "hold_until"}
+    if fields.get("hold_until"):
+        try:
+            fields["hold_until"] = date.fromisoformat(fields["hold_until"]).isoformat()
+        except ValueError:
+            raise ValueError(f"hold_until must be a date like 2026-11-16, not '{fields['hold_until']}'")
     email = (fields.get("email") or "").strip().lower()
     if email and email != (c["email"] or "").lower():
         dup = con.execute("SELECT c.id FROM contacts c JOIN workspaces w ON w.id = c.workspace_id "
@@ -835,9 +865,16 @@ def due(con, workspace=None, through=None):
         sql += " AND w.id = ?"
         args.append(_ws(con, workspace)["id"])
     rows = [_contact_dict(r) for r in con.execute(sql + " ORDER BY c.next_due IS NULL, c.next_due", args)]
+    stuck = []  # everyone over STALE_DAYS in one stage, longest first, whether or not they have a next step
+    for r in con.execute(CONTACT_SQL + ("WHERE w.id = ?" if workspace else ""), args):
+        c = _contact_dict(r)
+        c["stale_days"] = stale_days(c, _kinds(con, c["workspace"]))
+        if c["stale_days"]:
+            stuck.append(c)
     return {"due": [r for r in rows if r["next_due"] and r["next_due"] <= through],
             "upcoming": [r for r in rows if r["next_due"] and r["next_due"] > through],
-            "undated": [r for r in rows if not r["next_due"]]}
+            "undated": [r for r in rows if not r["next_due"]],
+            "stuck": sorted(stuck, key=lambda c: -c["stale_days"])}
 
 
 def pipeline(con, workspace):
@@ -872,7 +909,9 @@ def overview(con, workspace, query=""):
                              f"ORDER BY at, id", ids):
             said[r["contact_id"]] = r
         last = {k: v["at"] for k, v in said.items()}
+    kinds = _kinds(con, contacts[0]["workspace"]) if contacts else {}
     for c in contacts:
+        c["stale_days"] = stale_days(c, kinds)
         c["progress"] = prog.get(c["id"], {"done": 0, "planned": 0, "paused": 0, "skipped": 0}) | {"steps": path.get(c["id"], [])}
         c["last_touch"] = last.get(c["id"])
         c["last_said"] = said[c["id"]]["summary"] if c["id"] in said else ""
