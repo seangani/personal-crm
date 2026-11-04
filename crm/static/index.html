@@ -274,6 +274,8 @@ th .arrow { color: var(--accent); }
 .srow input, .srow select, .srow textarea { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .srow .more { display: grid; gap: 8px; }
 .srow textarea { min-height: 56px; }
+.srow .wk { display: flex; gap: 8px; align-items: center; margin: 0; font-size: var(--text-sm); color: var(--ink); cursor: pointer; }
+.srow .wk input { width: 16px; min-height: 16px; accent-color: var(--accent); }
 /* drawer */
 .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: none; }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 100%; max-width: 560px; background: var(--panel); z-index: 11;
@@ -512,9 +514,18 @@ function filterBar({ stage = true, due = true } = {}, shown) {
     ${any ? `<button class="link" id="clearF">Clear filters</button>` : ""}</div>`;
 }
 
-function duePill(d, hasStep = true) {
+const dayName = d => new Date(d + "T12:00").toLocaleDateString("en-US", { weekday: "short" });
+// the next Saturday, or today when it's already Saturday or Sunday (dates as YYYY-MM-DD)
+function weekendOf(t) { const d = new Date(t + "T12:00"), w = d.getDay(); if (w && w < 6) d.setDate(d.getDate() + 6 - w); return d.toLocaleDateString("en-CA"); }
+function duePill(d, hasStep = true, weekend = false) {
   if (!d) return hasStep ? `<span class="pill">No date</span>` : "";
   const t = today();
+  // a weekend call due Saturday is still on time on Sunday
+  if (weekend) {
+    const sat = new Date(t + "T12:00").getDay() === 0 ? inDays(-1) : weekendOf(t);
+    if (d >= sat && d <= t) return `<span class="date today">This weekend</span>`;
+    if (d > t) return `<span class="date">Weekend, ${dayName(d)} ${fmt(d)}</span>`;
+  }
   if (d < t) return `<span class="pill late">Overdue since ${fmt(d)}</span>`;
   if (d === t) return `<span class="date today">Today</span>`;
   return `<span class="date">${fmt(d)}</span>`;
@@ -560,7 +571,7 @@ function row(c) {
   return `<div class="ov-row" data-id="${c.id}">
     <div class="who">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>
     <div class="stg">${stagePill(c)}${stuckTag(c)}</div>${dots(c)}<div class="nx">${nextText(c)}</div>
-    <div class="due">${c.current ? duePill(c.current.due) : ""}</div></div>`;
+    <div class="due">${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div></div>`;
 }
 const byDue = list => [...list].sort((a, b) => (a.current?.due || "9") < (b.current?.due || "9") ? -1 : 1);
 
@@ -602,7 +613,7 @@ const placeOf = c => c.location ? `<span class="place">${icon("pin")}${esc(c.loc
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
 function warmRow(c) {
   const said = c.last_said && !/^Strategy:/.test(c.last_said) ? c.last_said : "";
-  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due)}</span>`
+  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
   return `<div class="wrow" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
     <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}</div></div>`;
@@ -641,7 +652,7 @@ function callSession(calls) {
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
       <div class="sub">${companyTag(c)}${placeOf(c)}</div>
-      <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due)}</div></div>
+      <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due, true, c.current.weekend)}</div></div>
       ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
       <div class="lbl" id="whl">What happened?</div>
@@ -715,7 +726,10 @@ function renderOverview() {
     <div><b>${interested}</b><span>interested or further</span></div><div class="paidn${has(paid)}"><b>${paid}</b><span>at a paid stage</span></div>
     <div><b>${dead}</b><span>dead</span></div><button class="stuckn${has(stuck)}" type="button" data-stuckgo title="See everyone stuck in one stage over 4 days"><b>${stuck}</b><span>stuck over 4 days</span></button><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
   const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm)}</div>`;
-  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2></div>${callSession(calls)}</div>`;
+  const sat = weekendOf(t), sun = new Date(new Date(sat + "T12:00").getTime() + 864e5).toLocaleDateString("en-CA");
+  const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
+  const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
+  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><div class="grow"></div>${wkNote}</div>${callSession(calls)}</div>`;
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
     ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
       <div class="rows">${shownEmails.map(row).join("")}</div>
@@ -741,7 +755,7 @@ function renderBoard() {
     const cs = list.filter(c => c.stage === s.name);
     return `<div class="col ${s.kind === "closed" ? "closed" : ""}"><div class="colhead"><h3>${esc(s.name)}</h3><span class="n">${cs.length}</span></div>
       ${cs.slice(0, 150).map(c => `<div class="card" data-id="${c.id}">
-        <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due) : ""}</div>
+        <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div>
         ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
         ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}${stuckTag(c)}</div>`).join("")}
       ${cs.length > 150 ? `<div class="empty">+${cs.length - 150} more, search to narrow</div>` : ""}</div>`;
@@ -768,14 +782,15 @@ function stratStep(s = { type: "email", day: 0 }) {
   return `<div class="srow">${typeSel}<input data-k="day" type="number" min="0" step="1" value="${esc(s.day)}" title="Day, counted from the start" aria-label="Day">
     <div class="more"><input data-k="title" value="${esc(s.title)}" placeholder="Name, like Bump or Second call">
       <input data-k="subject" value="${esc(s.subject)}" placeholder="Email subject (optional)" ${s.type === "email" ? "" : "hidden"}>
-      <textarea data-k="body" placeholder="${s.type === "email" ? "Message template (optional)" : "Notes or talking points (optional)"}">${esc(s.body)}</textarea></div>
+      <textarea data-k="body" placeholder="${s.type === "email" ? "Message template (optional)" : "Notes or talking points (optional)"}">${esc(s.body)}</textarea>
+      <label class="wk"><input type="checkbox" data-k="weekend"${s.weekend ? " checked" : ""}>On the weekend (next Saturday)</label></div>
     <button class="btn sm" data-rm type="button" aria-label="Remove step">${icon("x")}</button></div>`;
 }
 function stratCard(s) {
   return `<div class="strat" data-sid="${s.id || ""}">
     <input class="name" data-k="name" value="${esc(s.name)}" placeholder="Strategy name" aria-label="Strategy name">
     <input class="desc" data-k="description" value="${esc(s.description)}" placeholder="What this strategy is for" aria-label="Description">
-    <div class="muted note">${s.id ? `${s.used} people follow it.` : "New strategy."} Day 0 is the day someone starts. Weekends move to Monday.</div>
+    <div class="muted note">${s.id ? `${s.used} people follow it.` : "New strategy."} Day 0 is the day someone starts. Steps move off weekends to Monday, except ones marked On the weekend, which go to the next Saturday.</div>
     <div class="ssteps">${(s.steps || []).map(stratStep).join("")}</div>
     <div class="row"><button class="btn sm" data-addstep>Add step</button><div class="grow"></div>
       ${s.id && !s.used ? `<button class="btn sm danger" data-delstrat>Delete</button>` : ""}
@@ -839,7 +854,7 @@ async function renderStrategyDetail(id) {
     <p class="muted note">Shares are out of the people contacted so far.</p>
     <div class="section"><div class="head"><h2>Steps</h2></div>
       <ol class="seq">${d.steps.map((x, i) => `<li>
-        <div class="day">Day ${x.day}</div>
+        <div class="day">Day ${x.day}${x.weekend ? `<span class="muted">, on the weekend</span>` : ""}</div>
         <div class="what">${icon(x.type)}<b>${esc(x.title || TYPES[x.type])}</b>${x.title && x.title !== TYPES[x.type] ? `<span class="muted">${esc(TYPES[x.type])}</span>` : ""}</div>
         <div class="counts"><span><b>${x.done}</b> did it</span><span><b>${x.now}</b> on it now</span><span><b>${x.ahead}</b> still ahead</span>
           ${x.paused ? `<span><b>${x.paused}</b> paused</span>` : ""}</div></li>`).join("")}</ol>
@@ -849,7 +864,7 @@ async function renderStrategyDetail(id) {
 function readStrat(card) {
   return { id: card.dataset.sid ? Number(card.dataset.sid) : null, workspace: state.ws,
     name: card.querySelector('[data-k="name"]').value.trim(), description: card.querySelector('[data-k="description"]').value.trim(),
-    steps: [...card.querySelectorAll(".srow")].map(r => Object.fromEntries([...r.querySelectorAll("[data-k]")].map(i => [i.dataset.k, i.value]))) };
+    steps: [...card.querySelectorAll(".srow")].map(r => Object.fromEntries([...r.querySelectorAll("[data-k]")].map(i => [i.dataset.k, i.type === "checkbox" ? i.checked : i.value]))) };
 }
 
 // ---- person panel --------------------------------------------------------------------------------
@@ -994,7 +1009,7 @@ async function openContact(id) {
     const open = state.open.has(s.id);
     return `<div class="stp${isCur ? " cur" : ""}" data-step="${s.id}">
       <button class="h" type="button" aria-expanded="${open}" aria-controls="sb${s.id}"${isCur ? ' aria-current="step"' : ""}>${icon(s.type)}
-        <span class="t">${esc(stepLabel(s))}</span>${isCur ? `<span class="pill blue">Next</span>` : ""}${s.status === "paused" ? `<span class="pill">Paused</span>` : duePill(s.due)}</button>
+        <span class="t">${esc(stepLabel(s))}</span>${isCur ? `<span class="pill blue">Next</span>` : ""}${s.status === "paused" ? `<span class="pill">Paused</span>` : duePill(s.due, true, s.weekend)}</button>
       <div class="b" id="sb${s.id}"${open ? "" : " hidden"}>${stepBody(s, c)}</div></div>`;
   };
   const strategies = state.board.strategies;

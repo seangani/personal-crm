@@ -127,9 +127,10 @@ def set_next_step(contact_id: int, step: str, due: str = "", draft: str = "") ->
 @mcp.tool()
 def whats_due(workspace: str = "", through: str = "") -> dict:
     """Next steps due today or earlier (or through a YYYY-MM-DD date), plus upcoming and undated ones, plus
-    "stuck": everyone over 4 days in one stage (not won, closed or on hold), longest first."""
+    "stuck": everyone over 4 days in one stage (not won, closed or on hold), longest first, plus
+    "weekend_calls": the coming weekend's calls (Saturday and Sunday dates, who, phone) and how many are overdue."""
     r = _with(db.due, workspace or None, through or None)
-    return {k: [_slim(c) for c in v] for k, v in r.items()}
+    return {k: v if k == "weekend_calls" else [_slim(c) for c in v] for k, v in r.items()}
 
 
 @mcp.tool()
@@ -147,8 +148,10 @@ def strategy_results(strategy_id: int) -> dict:
 
 @mcp.tool()
 def save_strategy(workspace: str, name: str, steps: list[dict], description: str = "", strategy_id: int = 0) -> dict:
-    """Create a strategy, or change one by passing strategy_id. steps = [{type, day, title, subject, body}];
-    type is email, call, text, linkedin, meeting, task or close; day counts from the start (0 = first day)."""
+    """Create a strategy, or change one by passing strategy_id. steps = [{type, day, title, subject, body, weekend}];
+    type is email, call, text, linkedin, meeting, task or close; day counts from the start (0 = first day).
+    weekend: true puts that step on the next Saturday (Saturday or Sunday stay as is), for Sean's weekend calls;
+    other steps move off weekends to Monday. Saving changes only people put on it afterwards."""
     return _with(db.save_strategy, workspace, name, steps, description, strategy_id or None)
 
 
@@ -287,7 +290,7 @@ async def api_board(request):
 @_safe
 async def api_due(request):
     r = _with(db.due, request.query_params.get("workspace") or None)
-    return {k: [_slim(c) for c in v] for k, v in r.items()}
+    return {k: v if k == "weekend_calls" else [_slim(c) for c in v] for k, v in r.items()}
 
 
 @mcp.custom_route("/api/contacts/{cid:int}", methods=["GET"])

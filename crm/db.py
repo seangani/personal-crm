@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
-    steps TEXT NOT NULL DEFAULT '[]'   -- JSON list of {type, day, title, subject, body}; day 0 is the start
+    steps TEXT NOT NULL DEFAULT '[]'   -- JSON list of {type, day, title, subject, body, weekend}; day 0 is the start
 );
 CREATE TABLE IF NOT EXISTS steps (
     id INTEGER PRIMARY KEY,
@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS steps (
     outcome TEXT DEFAULT '',
     done_at TEXT,
     origin TEXT DEFAULT 'manual',  -- strategy (made from a template) or manual
+    weekend INTEGER DEFAULT 0,     -- 1: belongs on a Saturday or Sunday (Sean calls on weekends)
     created TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS steps_contact ON steps(contact_id, status, due);
@@ -124,6 +125,8 @@ def connect():
     con.executescript(SCHEMA)
     if "after_call" not in {r["name"] for r in con.execute("PRAGMA table_info(workspaces)")}:
         con.execute("ALTER TABLE workspaces ADD COLUMN after_call TEXT DEFAULT ''")
+    if "weekend" not in {r["name"] for r in con.execute("PRAGMA table_info(steps)")}:
+        con.execute("ALTER TABLE steps ADD COLUMN weekend INTEGER DEFAULT 0")
     cols = {r["name"] for r in con.execute("PRAGMA table_info(contacts)")}
     for col, ddl in (("strategy_id", "INTEGER REFERENCES strategies(id)"), ("location", "TEXT DEFAULT ''"),
                      ("ai_state", "TEXT DEFAULT ''"), ("ai_note", "TEXT DEFAULT ''"), ("ai_at", "TEXT"),
@@ -197,6 +200,20 @@ def _kinds(con, slug):
 def _workday(d):
     while d.weekday() >= 5:
         d += timedelta(days=1)
+    return d
+
+
+def _weekend(d):
+    """The next Saturday, or the day itself when it's already a Saturday or Sunday."""
+    return d if d.weekday() >= 5 else d + timedelta(days=5 - d.weekday())
+
+
+def _snap(d, weekend, after=None):
+    """Move a step date onto the right kind of day: weekend steps to the weekend, the rest to a weekday. With
+    `after` (the step before it) it lands later than that step, a weekend step on a later weekend."""
+    d = _weekend(d) if weekend else _workday(d)
+    while after and d <= after:
+        d = d + timedelta(days=7) if weekend else _workday(after + timedelta(days=1))
     return d
 
 
@@ -280,7 +297,8 @@ def save_strategy(con, workspace, name, steps, description="", strategy_id=None)
         if s.get("type") not in STEP_TYPES:
             raise ValueError(f"Bad step type '{s.get('type')}'. Types: {', '.join(STEP_TYPES)}")
         clean.append({"type": s["type"], "day": max(0, int(s.get("day") or 0)), "title": s.get("title", "") or "",
-                      "subject": s.get("subject", "") or "", "body": s.get("body", "") or ""})
+                      "subject": s.get("subject", "") or "", "body": s.get("body", "") or "",
+                      "weekend": s.get("weekend") in (True, 1, "1", "true", "on")})
     clean.sort(key=lambda s: s["day"])
     if strategy_id:
         get_strategy(con, strategy_id)
@@ -306,7 +324,8 @@ def delete_strategy(con, strategy_id):
 
 def apply_strategy(con, contact_id, strategy, start=None, source="claude"):
     """Put a contact on a strategy: their planned strategy steps are replaced by the template's,
-    dated from `start` (default today), weekends moved to Monday. Done steps and manual steps stay."""
+    dated from `start` (default today): weekend steps on the next Saturday (or Sunday), the rest on weekdays,
+    each later than the one before. Done steps and manual steps stay."""
     c = get_contact(con, contact_id, with_touches=False)
     if strategy in (None, "", 0):
         con.execute("DELETE FROM steps WHERE contact_id = ? AND origin = 'strategy' AND status IN ('planned', 'paused')",
@@ -329,10 +348,11 @@ def apply_strategy(con, contact_id, strategy, start=None, source="claude"):
         else:
             todo.append(s)
     first = todo[0]["day"] if todo else 0
+    prev = None
     for s in todo:
-        _insert_step(con, contact_id, s["type"], s["title"],
-                     _workday(start + timedelta(days=s["day"] - first)).isoformat(), s["subject"], s["body"],
-                     origin="strategy")
+        prev = _snap(start + timedelta(days=s["day"] - first), s.get("weekend"), prev)
+        _insert_step(con, contact_id, s["type"], s["title"], prev.isoformat(), s["subject"], s["body"],
+                     origin="strategy", weekend=s.get("weekend"))
     con.execute("UPDATE contacts SET strategy_id = ?, updated = ? WHERE id = ?", (st["id"], now(), contact_id))
     if c["strategy_id"] != st["id"]:
         con.execute("INSERT INTO touches (contact_id, at, kind, summary, source) VALUES (?, ?, 'note', ?, ?)",
@@ -643,14 +663,14 @@ def _sync_next(con, contact_id):
                 (step_label(s) if s else "", s["due"] if s else None, s["body"] if s else "", contact_id))
 
 
-def _insert_step(con, contact_id, type, title="", due=None, subject="", body="", origin="manual"):
+def _insert_step(con, contact_id, type, title="", due=None, subject="", body="", origin="manual", weekend=False):
     if type not in STEP_TYPES:
         raise ValueError(f"Bad step type '{type}'. Types: {', '.join(STEP_TYPES)}")
     if due:
         date.fromisoformat(due)
-    return con.execute("INSERT INTO steps (contact_id, type, title, due, subject, body, origin, created) "
-                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                       (contact_id, type, title or "", due or None, subject or "", body or "", origin, now())).lastrowid
+    return con.execute("INSERT INTO steps (contact_id, type, title, due, subject, body, origin, weekend, created) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (contact_id, type, title or "", due or None, subject or "", body or "", origin, int(bool(weekend)), now())).lastrowid
 
 
 def add_step(con, contact_id, type, title="", due=None, subject="", body=""):
@@ -822,10 +842,11 @@ def _make_room(con, contact_id, due):
     if not first or first > due:
         return
     shift = date.fromisoformat(due) - date.fromisoformat(first) + timedelta(days=1)
-    for s in con.execute("SELECT id, due FROM steps WHERE contact_id = ? AND origin = 'strategy' "
-                         "AND status = 'planned' AND due IS NOT NULL", (contact_id,)).fetchall():
-        con.execute("UPDATE steps SET due = ? WHERE id = ?",
-                    (_workday(date.fromisoformat(s["due"]) + shift).isoformat(), s["id"]))
+    prev = date.fromisoformat(due)
+    for s in con.execute("SELECT id, due, weekend FROM steps WHERE contact_id = ? AND origin = 'strategy' "
+                         "AND status = 'planned' AND due IS NOT NULL ORDER BY due, id", (contact_id,)).fetchall():
+        prev = _snap(date.fromisoformat(s["due"]) + shift, s["weekend"], prev)
+        con.execute("UPDATE steps SET due = ? WHERE id = ?", (prev.isoformat(), s["id"]))
 
 
 def set_next_step(con, contact_id, step, due=None, draft=None, source="claude"):
@@ -874,7 +895,27 @@ def due(con, workspace=None, through=None):
     return {"due": [r for r in rows if r["next_due"] and r["next_due"] <= through],
             "upcoming": [r for r in rows if r["next_due"] and r["next_due"] > through],
             "undated": [r for r in rows if not r["next_due"]],
-            "stuck": sorted(stuck, key=lambda c: -c["stale_days"])}
+            "stuck": sorted(stuck, key=lambda c: -c["stale_days"]),
+            "weekend_calls": weekend_calls(con, workspace)}
+
+
+def weekend_calls(con, workspace=None):
+    """The coming weekend's calls (this weekend's when it's Saturday or Sunday), with the date and each person's
+    name, company and phone, plus how many weekend calls are already overdue."""
+    today = date.today()
+    sat = _weekend(today) - timedelta(days=1 if today.weekday() == 6 else 0)
+    sun = sat + timedelta(days=1)
+    sql = ("SELECT s.id AS step_id, s.title, s.due, c.id, c.person, c.company, c.phone, c.mobile, c.stage FROM steps s "
+           "JOIN contacts c ON c.id = s.contact_id JOIN workspaces w ON w.id = c.workspace_id "
+           "WHERE s.status = 'planned' AND s.type = 'call' AND s.weekend = 1")
+    args = []
+    if workspace:
+        sql += " AND w.id = ?"
+        args.append(_ws(con, workspace)["id"])
+    rows = [dict(r) for r in con.execute(sql + " ORDER BY s.due, c.company", args)]
+    return {"saturday": sat.isoformat(), "sunday": sun.isoformat(),
+            "calls": [r for r in rows if sat.isoformat() <= r["due"] <= sun.isoformat()],
+            "overdue": sum(r["due"] < sat.isoformat() for r in rows)}
 
 
 def pipeline(con, workspace):
@@ -916,7 +957,7 @@ def overview(con, workspace, query=""):
         c["last_touch"] = last.get(c["id"])
         c["last_said"] = said[c["id"]]["summary"] if c["id"] in said else ""
         s = cur.get(c["id"])
-        c["current"] = {k: s[k] for k in ("id", "type", "due", "subject")} | {"label": step_label(s)} if s else None
+        c["current"] = {k: s[k] for k in ("id", "type", "due", "subject", "weekend")} | {"label": step_label(s)} if s else None
         if s and s["type"] == "call":
             c["current"]["body"] = s["body"]  # talking points for the call session
     return {"stages": pipeline(con, workspace), "contacts": contacts, "stats": strategy_stats(con, workspace),
