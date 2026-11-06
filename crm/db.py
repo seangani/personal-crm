@@ -9,6 +9,7 @@ next_step / next_due / next_draft columns always mirror the current step, so old
 """
 
 import json
+import re
 import os
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -61,7 +62,9 @@ CREATE TABLE IF NOT EXISTS touches (
     at TEXT NOT NULL,              -- YYYY-MM-DD or YYYY-MM-DDTHH:MM
     kind TEXT NOT NULL,            -- email, bump, call, voicemail, reply, text, linkedin, meeting, note, stage
     summary TEXT DEFAULT '',
-    source TEXT DEFAULT ''         -- who logged it: web, claude, import, sender, inbox
+    source TEXT DEFAULT '',        -- who logged it: web, claude, import, sender, inbox
+    subject TEXT DEFAULT '',       -- for a reply: the email's subject
+    detail TEXT DEFAULT ''         -- for a reply: everything they wrote, the quoted original cut off
 );
 CREATE INDEX IF NOT EXISTS touches_contact ON touches(contact_id, at);
 CREATE TABLE IF NOT EXISTS strategies (
@@ -125,6 +128,10 @@ def connect():
     con.executescript(SCHEMA)
     if "after_call" not in {r["name"] for r in con.execute("PRAGMA table_info(workspaces)")}:
         con.execute("ALTER TABLE workspaces ADD COLUMN after_call TEXT DEFAULT ''")
+    tcols = {r["name"] for r in con.execute("PRAGMA table_info(touches)")}
+    for col in ("subject", "detail"):
+        if col not in tcols:
+            con.execute(f"ALTER TABLE touches ADD COLUMN {col} TEXT DEFAULT ''")
     if "weekend" not in {r["name"] for r in con.execute("PRAGMA table_info(steps)")}:
         con.execute("ALTER TABLE steps ADD COLUMN weekend INTEGER DEFAULT 0")
     cols = {r["name"] for r in con.execute("PRAGMA table_info(contacts)")}
@@ -174,6 +181,19 @@ def _contact_dict(row):
     d = dict(row)
     d["custom"] = json.loads(d["custom"] or "{}")
     return d
+
+
+NOT_A_REPLY = re.compile(r"^(bounced|auto-reply|out of (the )?office)", re.I)
+
+
+def is_reply(summary):
+    """A reply touch that is a person writing back, not a bounce or an out-of-office."""
+    return not NOT_A_REPLY.match(summary or "")
+
+
+def reply_text(t):
+    """What they wrote: the full text when the inbox saved it, else the summary without "Replied:" in front."""
+    return (t["detail"] or "").strip() or re.sub(r"^replied( \d{1,2}/\d{1,2})?:\s*", "", t["summary"] or "", flags=re.I).strip()
 
 
 STALE_DAYS = 4  # Sean's rule: nobody sits in one stage longer than this
@@ -580,10 +600,11 @@ def move_stage(con, contact_id, stage, reason="", at=None, source="claude"):
     return get_contact(con, contact_id)
 
 
-def log_touch(con, contact_id, kind, summary="", at=None, source="claude"):
+def log_touch(con, contact_id, kind, summary="", at=None, source="claude", detail="", subject=""):
+    """Add a timeline entry. For a reply, `detail` is the full text they wrote and `subject` its subject line."""
     get_contact(con, contact_id, with_touches=False)
-    con.execute("INSERT INTO touches (contact_id, at, kind, summary, source) VALUES (?, ?, ?, ?, ?)",
-                (contact_id, at or now(), kind, summary, source))
+    con.execute("INSERT INTO touches (contact_id, at, kind, summary, source, detail, subject) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (contact_id, at or now(), kind, summary, source, detail or "", subject or ""))
     con.execute("UPDATE contacts SET updated = ? WHERE id = ?", (now(), contact_id))
     con.commit()
     return get_contact(con, contact_id)
@@ -775,12 +796,27 @@ def _save_undo(con, s):
     con.execute("INSERT OR REPLACE INTO undo (step_id, data, at) VALUES (?, ?, ?)", (s["id"], json.dumps(data), now()))
 
 
+def kill(con, contact_id, stage=None, source="web"):
+    """Mark a lead dead in one go: move them to a closed stage (the workspace's first one unless `stage` names
+    another), which skips every planned and paused step, so they leave every call list and warm tab. Nothing is
+    deleted. undo_step(con, -contact_id) puts it all back."""
+    c = get_contact(con, contact_id, with_touches=False)
+    closed = [x["name"] for x in get_workspace(con, c["workspace"])["stages"] if x["kind"] == "closed"]
+    stage = _check_stage(get_workspace(con, c["workspace"]), stage) if stage else closed[0]
+    if stage not in closed:
+        raise ValueError(f"Kill needs a closed stage: {', '.join(closed)}")
+    if c["stage"] in closed:
+        raise ValueError(f"{c['person'] or c['company']} is already {c['stage']}")
+    _save_undo(con, {"contact_id": contact_id, "id": -contact_id})  # a kill's undo is kept under minus the contact id
+    return move_stage(con, contact_id, stage, "Killed from profile", None, source)
+
+
 def undo_step(con, step_id):
     """Put back a step done on the page: its status, the contact's stage and steps, and drop the timeline
     entries it added. Only the most recent thing done for that contact can be undone."""
     row = con.execute("SELECT data FROM undo WHERE step_id = ?", (step_id,)).fetchone()
     if not row:
-        raise ValueError("That step can't be undone from here. Change it in their panel instead.")
+        raise ValueError("That can't be undone from here. Change it in their panel instead.")
     d = json.loads(row["data"])
     newer = con.execute("SELECT 1 FROM undo u WHERE u.step_id != ? AND json_extract(u.data, '$.contact') = ? "
                         "AND u.at > (SELECT at FROM undo WHERE step_id = ?)", (step_id, d["contact"], step_id)).fetchone()
@@ -929,7 +965,7 @@ def overview(con, workspace, query=""):
     """Everything the home screen needs: contacts with their current step and progress, plus stats."""
     contacts = find_contacts(con, workspace, query, limit=5000)
     ids = [c["id"] for c in contacts]
-    prog, cur, last, said, upd = {}, {}, {}, {}, {}
+    prog, cur, last, said, upd, reply = {}, {}, {}, {}, {}, {}
     if ids:
         marks = ",".join("?" * len(ids))
         for r in con.execute(f"SELECT contact_id, sum(status = 'done') AS done, sum(status = 'planned') AS planned, "
@@ -952,12 +988,18 @@ def overview(con, workspace, query=""):
         last = {k: v["at"] for k, v in said.items()}
         # the latest update of any kind (a call, a note, a stage move), for the Needs updates list
         upd = dict(con.execute(f"SELECT contact_id, max(at) FROM touches WHERE contact_id IN ({marks}) GROUP BY contact_id", ids).fetchall())
+        reply = {}  # what they last wrote back, for a preview on the lists
+        for r in con.execute(f"SELECT contact_id, at, summary, detail FROM touches WHERE contact_id IN ({marks}) AND kind = 'reply' "
+                             f"ORDER BY at, id", ids):
+            if is_reply(r["summary"]):
+                reply[r["contact_id"]] = {"at": r["at"], "text": reply_text(r)[:200]}
     kinds = _kinds(con, contacts[0]["workspace"]) if contacts else {}
     for c in contacts:
         c["stale_days"] = stale_days(c, kinds)
         c["progress"] = prog.get(c["id"], {"done": 0, "planned": 0, "paused": 0, "skipped": 0}) | {"steps": path.get(c["id"], [])}
         c["last_touch"] = last.get(c["id"])
         c["last_update"] = upd.get(c["id"])
+        c["last_reply"] = reply.get(c["id"])
         c["last_said"] = said[c["id"]]["summary"] if c["id"] in said else ""
         s = cur.get(c["id"])
         c["current"] = {k: s[k] for k in ("id", "type", "due", "subject", "weekend")} | {"label": step_label(s)} if s else None

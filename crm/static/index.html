@@ -185,6 +185,13 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .nxo > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wmeta { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; padding-left: 28px; color: var(--muted); }
 .wmeta .ask { color: var(--ink); }
+.wrote { color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card .rq { margin-top: 4px; font-size: var(--text-xs); color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.reply { border: 1px solid var(--line); background: var(--hot-bg); border-radius: 8px; padding: 8px 12px; margin: 12px 0 0; font-size: var(--text-sm); }
+.reply .rh { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.reply p { margin: 4px 0 0; max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+.killrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; font-size: var(--text-sm); }
+.killrow .note { flex-basis: 100%; margin: 0; }
 .hacts { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 4px; color: var(--muted); }
 .hacts .tel { display: inline-flex; gap: 4px; align-items: center; }
 .wrow.held { opacity: 0.55; }
@@ -615,14 +622,18 @@ const placeOf = c => c.location ? `<span class="place">${icon("pin")}${esc(c.loc
 
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
 function warmRow(c, extra = "", dim = false) {
-  const said = c.last_said && !/^Strategy:/.test(c.last_said) ? c.last_said : "";
+  const said = c.last_said && !/^Strategy:/.test(c.last_said) && !(c.last_reply && /^replied/i.test(c.last_said)) ? c.last_said : "";
   const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
   return `<div class="wrow${dim ? " held" : ""}" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
-    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
+    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${replyPeek(c)}${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
 }
 // Super hot: people who said they're interested (Interested and every stage after it, or Priority FOCUS or HOT).
 // Needs updates: everyone past the cold stages (Reached gatekeeper onward), stalest first. Never won or closed.
+// a reply that is a person writing back (not a bounce or out-of-office), and what they wrote
+const isReply = t => t.kind === "reply" && !/^(bounced|auto-reply|out of (the )?office)/i.test(t.summary || "");
+const replyText = t => (t.detail || "").trim() || (t.summary || "").replace(/^replied( \d{1,2}\/\d{1,2})?:\s*/i, "").trim();
+const replyPeek = c => c.last_reply ? `<span class="wrote">They wrote ${daysText(daysSince(c.last_reply.at))}: “${esc(c.last_reply.text)}”</span>` : "";
 const priorityOf = c => String(c.custom?.Priority || "");
 const isFocus = c => /^focus/i.test(priorityOf(c));
 const isHeld = c => (c.hold_until || "") > today();
@@ -792,7 +803,7 @@ function renderBoard() {
       ${cs.slice(0, 150).map(c => `<div class="card" data-id="${c.id}">
         <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div>
         ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
-        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}${stuckTag(c)}</div>`).join("")}
+        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}${stuckTag(c)}${c.last_reply ? `<div class="rq">“${esc(c.last_reply.text)}”</div>` : ""}</div>`).join("")}
       ${cs.length > 150 ? `<div class="empty">+${cs.length - 150} more, search to narrow</div>` : ""}</div>`;
   }).join("")}</div>`;
 }
@@ -1038,7 +1049,10 @@ async function openContact(id) {
   const status = `<div class="status">${stagePill(c)}${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}${stuckTag(c, true)}
     ${held ? `<span class="muted">No stuck warning until ${fmt(c.hold_until)}</span>` : ""}
     <span class="${warm && (n == null || n >= 7) ? "cold" : "muted"}">${contacted}</span></div>`;
-  const recent = c.touches.slice(0, 2);
+  const recent = c.touches.slice(0, 2), reply = c.touches.find(isReply);
+  const closedNames = ws.stages.filter(s => s.kind === "closed").map(s => s.name), dead = closedNames.includes(c.stage);
+  const lastStage = c.touches.find(t => t.kind === "stage");
+  const killed = dead && /Killed from profile/.test(lastStage?.summary || "");
 
   const stepCard = (s, isCur) => {
     const open = state.open.has(s.id);
@@ -1054,7 +1068,11 @@ async function openContact(id) {
     <div class="sub">${esc(c.role && c.person ? `${c.role} at ${c.company}` : c.role || (c.person ? c.company : ""))}
       <button class="link" id="edit" type="button">Edit details</button></div>
     ${status}
-    ${recent.length ? `<ul class="timeline recent">${recent.map(touchItem).join("")}</ul>` : ""}
+    ${reply ? `<div class="reply"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
+      <p class="pre">${esc(replyText(reply))}</p></div>` : ""}
+    ${killed ? `<div class="killrow"><span class="pill dead">Killed</span><span class="muted">Every planned step was skipped.</span><button class="link" id="unkill" type="button">Undo kill</button></div>`
+      : dead ? "" : `<div class="killrow" id="killrow"><button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
+    ${recent.filter(t => t !== reply).length ? `<ul class="timeline recent">${recent.filter(t => t !== reply).map(touchItem).join("")}</ul>` : ""}
     <div id="details">${detailsView(c, shownPhone)}</div>
     <h2>Steps</h2>
     ${done.map(s => `<div class="donel">${icon("done")}<span class="t">${esc(stepLabel(s))}</span><span class="dt">${fmt(s.done_at)}</span>
@@ -1099,6 +1117,22 @@ async function openContact(id) {
   };
   $("#edit").onclick = () => showDetails(true);
   $("#stage").onchange = async e => { await api(`/api/contacts/${id}/stage`, { method: "POST", body: { stage: e.target.value } }); toast(`Moved to ${e.target.value}`); refresh(id); };
+  // killing asks first, in place: pick the closed stage, then confirm
+  const kb = $("#kill");
+  if (kb) kb.onclick = () => {
+    $("#killrow").innerHTML = `<span>Mark ${esc(c.person || c.company)} dead?</span><label class="vh" for="killStage">Move to</label>
+      <select id="killStage" class="pick auto">${closedNames.filter(n => n !== "Bounced").map(n => `<option>${esc(n)}</option>`).join("")}</select>
+      <button class="btn sm danger" id="killGo" type="button">Kill lead</button><button class="link" id="killNo" type="button">Cancel</button>
+      <span class="muted note">Every planned step is skipped, so they drop off every call list. Their history stays.</span>`;
+    $("#killStage").focus();
+    $("#killNo").onclick = () => openContact(id);
+    $("#killGo").onclick = async () => {
+      const stage = $("#killStage").value;
+      await api(`/api/contacts/${id}/kill`, { method: "POST", body: { stage } }); toast(`Moved to ${stage}`); refresh(id);
+    };
+  };
+  const ub = $("#unkill");
+  if (ub) ub.onclick = async () => { await api(`/api/contacts/${id}/kill`, { method: "POST", body: { undo: true } }); toast("Back where they were"); refresh(id); };
   $("#hold").onchange = async e => {
     await api(`/api/contacts/${id}`, { method: "PATCH", body: { hold_until: e.target.value } });
     toast(e.target.value ? `No stuck warning until ${fmt(e.target.value)}` : "Hold removed"); refresh(id);

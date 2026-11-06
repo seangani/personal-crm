@@ -107,9 +107,21 @@ def update_contact(contact_id: int, company: str = "", person: str = "", role: s
 
 
 @mcp.tool()
-def log_touch(contact_id: int, kind: str, summary: str, at: str = "") -> dict:
-    """Record a call, email, bump, voicemail, reply, text, meeting or note. `at` is YYYY-MM-DD[THH:MM], default now."""
-    return _slim(_with(db.log_touch, contact_id, kind, summary, at or None, "claude"))
+def log_touch(contact_id: int, kind: str, summary: str, at: str = "", reply_text: str = "", subject: str = "") -> dict:
+    """Record a call, email, bump, voicemail, reply, text, meeting or note. `at` is YYYY-MM-DD[THH:MM], default now.
+    For a reply, pass everything they wrote as reply_text (and the email's subject): the person panel shows it at
+    the top and the lists show a preview."""
+    return _slim(_with(db.log_touch, contact_id, kind, summary, at or None, "claude", reply_text, subject))
+
+
+@mcp.tool()
+def kill(contact_id: int, stage: str = "", undo: bool = False) -> dict:
+    """Mark a lead dead: move them to a closed stage (default Not interested; or Do not contact), skipping every
+    planned step so they leave the call lists and warm tabs. Nothing is deleted. undo=True puts back how they
+    stood before the kill."""
+    if undo:
+        return _slim(_with(db.undo_step, -contact_id))
+    return _slim(_with(db.kill, contact_id, stage or None, "claude"))
 
 
 @mcp.tool()
@@ -281,7 +293,7 @@ async def api_after_call(request):
 @_safe
 async def api_board(request):
     r = _with(db.overview, request.query_params["workspace"], request.query_params.get("q", ""))
-    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_said", "mobile", "notes")}
+    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_reply", "last_said", "mobile", "notes")}
                      for c in r["contacts"]]
     return r
 
@@ -325,6 +337,14 @@ async def api_stage(request):
 async def api_touch(request):
     b = await _body(request)
     return _with(db.log_touch, request.path_params["cid"], b["kind"], b.get("summary", ""), b.get("at") or None, "web")
+
+
+@mcp.custom_route("/api/contacts/{cid:int}/kill", methods=["POST"])
+@_safe
+async def api_kill(request):
+    b = await _body(request)
+    cid = request.path_params["cid"]
+    return _with(db.undo_step, -cid) if b.get("undo") else _with(db.kill, cid, b.get("stage") or None, "web")
 
 
 @mcp.custom_route("/api/contacts/{cid:int}/call", methods=["POST"])
