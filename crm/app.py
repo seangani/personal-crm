@@ -3,11 +3,12 @@
     .venv/bin/python -m crm.app            # http://localhost:8787  (MCP at /mcp)
 """
 
-import asyncio
 import json
 import os
+import time
 import subprocess
 from urllib.parse import quote
+from datetime import date
 from pathlib import Path
 
 import uvicorn
@@ -299,26 +300,25 @@ async def api_board(request):
     return r
 
 
-# Today's automatic Terms email send. The outreach chat owns the script; it reads its own send logs and prints JSON.
-OUTREACH_STATUS = Path(__file__).resolve().parents[3] / "Terms" / "Deepline" / "outreach_status.py"
+# Today's automatic Terms email send. The outreach chat's send job writes this file (every 20 s while sending,
+# once more at the end, swapped in whole), so the CRM only reads it and needs no extra permissions.
+OUTREACH_STATUS = Path(__file__).resolve().parents[3] / "Terms" / "Deepline" / "daily" / "status.json"
 
 
 @mcp.custom_route("/api/outreach-today", methods=["GET"])
 @_safe
 async def api_outreach_today(request):
-    if not OUTREACH_STATUS.exists():
-        return {"state": "unavailable", "error": "The outreach status script isn't there."}
-    try:  # in a thread, so a slow answer never holds up the rest of the CRM
-        r = await asyncio.to_thread(subprocess.run, ["/usr/bin/python3", "-I", str(OUTREACH_STATUS)], capture_output=True,
-                                    text=True, timeout=12, cwd=str(OUTREACH_STATUS.parent))
-    except subprocess.TimeoutExpired:
-        return {"state": "unavailable", "error": "The outreach status didn't answer. macOS may be asking whether python3 can "
-                "read your Desktop folder (where the send logs are): allow it, or turn it on in System Settings, Privacy "
-                "and Security, Files and Folders."}
+    today = date.today()
     try:
-        out = json.loads(r.stdout)
-    except json.JSONDecodeError:
-        return {"state": "unavailable", "error": (r.stderr or "No answer from the outreach status script").strip()[-300:]}
+        out = json.loads(OUTREACH_STATUS.read_text())
+        age = time.time() - OUTREACH_STATUS.stat().st_mtime
+    except (OSError, json.JSONDecodeError):
+        return {"state": "unavailable", "error": "The daily send hasn't written its status file yet."}
+    if out.get("date") != today.isoformat():  # today's send hasn't started; the file still holds the last run
+        return {"date": today.isoformat(), "state": "weekend" if today.weekday() >= 5 else "waiting", "total": 0, "sent": 0,
+                "window": out.get("window", ""), "per_day": out.get("per_day"), "lists": [], "upcoming": []}
+    if out.get("state") == "sending" and age > 120:
+        out["state"] = "stalled"
     # match each person to their CRM contact, so the page can open their profile and show their full name
     con = db.connect()
     try:

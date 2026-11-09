@@ -634,6 +634,7 @@ function outreachState(o) {
   return ({
     waiting: ["", "Waiting for 9 AM, or for the laptop to wake up"],
     sending: ["sending", "Sending now"],
+    stalled: ["stopped", "Sending, but the status hasn't updated in over 2 minutes. Check the Terminal window."],
     done: ["done", `Done${last ? ` at ${clock(last)}` : ""}`],
     stopped: ["stopped", "Stopped: Outlook and Mail aren't responding. The send log says what happened."],
     weekend: ["", "Weekend: no sends today"],
