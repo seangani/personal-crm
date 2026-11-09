@@ -3,6 +3,7 @@
     .venv/bin/python -m crm.app            # http://localhost:8787  (MCP at /mcp)
 """
 
+import asyncio
 import json
 import os
 import subprocess
@@ -307,8 +308,13 @@ OUTREACH_STATUS = Path(__file__).resolve().parents[3] / "Terms" / "Deepline" / "
 async def api_outreach_today(request):
     if not OUTREACH_STATUS.exists():
         return {"state": "unavailable", "error": "The outreach status script isn't there."}
-    r = subprocess.run(["/usr/bin/python3", "-I", str(OUTREACH_STATUS)], capture_output=True, text=True, timeout=30,
-                       cwd=str(OUTREACH_STATUS.parent))
+    try:  # in a thread, so a slow answer never holds up the rest of the CRM
+        r = await asyncio.to_thread(subprocess.run, ["/usr/bin/python3", "-I", str(OUTREACH_STATUS)], capture_output=True,
+                                    text=True, timeout=12, cwd=str(OUTREACH_STATUS.parent))
+    except subprocess.TimeoutExpired:
+        return {"state": "unavailable", "error": "The outreach status didn't answer. macOS may be asking whether python3 can "
+                "read your Desktop folder (where the send logs are): allow it, or turn it on in System Settings, Privacy "
+                "and Security, Files and Folders."}
     try:
         out = json.loads(r.stdout)
     except json.JSONDecodeError:

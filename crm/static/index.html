@@ -647,6 +647,11 @@ async function renderOutreach(o) {
     state.outreach = o; state.outreachKey = JSON.stringify(o);
     if (state.view !== "outreach") return;
   }
+  if (o.state === "unavailable") {
+    $("#main").innerHTML = `<div class="section"><div class="head"><h2>Outreach today</h2></div>
+      <div class="obox stopped"><p class="ostate">Can't show today's send right now</p><p class="muted note">${esc(o.error || "")}</p></div></div>`;
+    return;
+  }
   const [cls, words] = outreachState(o), total = o.total || 0, sent = o.sent || 0;
   const times = (o.lists || []).flatMap(l => [l.first_sent, l.last_sent]).filter(Boolean).sort();
   const first = times[0], last = times[times.length - 1];
