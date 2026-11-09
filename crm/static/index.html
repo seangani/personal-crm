@@ -205,6 +205,24 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .place .i { width: 14px; height: 14px; }
 .progress { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: var(--text-sm); }
 .track { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: clip; }
+.obox { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 20px; --obar: var(--muted); }
+.obox.sending { --obar: var(--accent); } .obox.done { --obar: var(--ok); } .obox.stopped { --obar: var(--dead); }
+.obig { display: flex; gap: 8px; align-items: baseline; } .obig b { font-size: var(--text-2xl); font-weight: 650; font-variant-numeric: tabular-nums; }
+.obig span { color: var(--muted); }
+.otrack { height: 12px; border-radius: 99px; background: var(--soft); overflow: clip; margin: 12px 0; }
+.otrack i { display: block; height: 100%; background: var(--obar); transform-origin: left; transition: transform 300ms ease; }
+.ostate { margin: 0; font-weight: 600; color: var(--obar); } .obox:not(.sending):not(.done):not(.stopped) .ostate { color: var(--ink); }
+.ofacts { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 12px 0 0; font-size: var(--text-sm); }
+.ofacts dt { color: var(--muted); font-size: var(--text-xs); } .ofacts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.odays { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.oday { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.oday b { display: block; font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; } .oday span { font-size: var(--text-xs); color: var(--muted); }
+.oday.none b { color: var(--muted); font-weight: 500; }
+.orow { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.orow[data-id] { cursor: pointer; } .orow[data-id]:hover { background: var(--soft); }
+.orow .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .orow .co { margin-left: 8px; color: var(--muted); }
+.orow.queued b { font-weight: 500; }
+@media (max-width: 560px) { .odays { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .track i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 200ms ease; }
 .session { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .session > div { min-width: 0; }
@@ -389,6 +407,7 @@ textarea.short { min-height: 72px; }
     <button data-v="board">Pipeline</button>
     <button data-v="all">Everyone</button>
     <button data-v="strategies">Strategies</button>
+    <button data-v="outreach" hidden>Outreach today</button>
   </nav>
   <div class="grow"></div>
   <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
@@ -598,10 +617,62 @@ async function load() {
 }
 
 function render() {
+  const terms = state.ws === "terms";  // the automatic daily send only exists for Terms
+  $('#tabs [data-v="outreach"]').hidden = !terms;
+  if (!terms && state.view === "outreach") state.view = "overview";
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
   if (!state.board) return;
   cleanFilters();
-  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies })[state.view]();
+  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach })[state.view]();
+}
+
+// ---- outreach today: the automatic daily email send (the outreach chat's script says how it's going) -------
+const clock = iso => iso ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+const SEND_GAP = 45;  // seconds between sends
+function outreachState(o) {
+  const last = o.lists?.map(l => l.last_sent).filter(Boolean).sort().pop();
+  return ({
+    waiting: ["", "Waiting for 9 AM, or for the laptop to wake up"],
+    sending: ["sending", "Sending now"],
+    done: ["done", `Done${last ? ` at ${clock(last)}` : ""}`],
+    stopped: ["stopped", "Stopped: Outlook and Mail aren't responding. The send log says what happened."],
+    weekend: ["", "Weekend: no sends today"],
+    nothing_due: ["done", "Nothing due today"],
+  })[o.state] || ["stopped", o.error || "Couldn't read today's send"];
+}
+async function renderOutreach(o) {
+  if (!o) {
+    if (!state.outreach) $("#main").innerHTML = `<div class="empty">Checking today's send...</div>`;
+    try { o = await api("/api/outreach-today"); } catch (e) { o = { state: "unavailable", error: "Couldn't reach the CRM" }; }
+    state.outreach = o; state.outreachKey = JSON.stringify(o);
+    if (state.view !== "outreach") return;
+  }
+  const [cls, words] = outreachState(o), total = o.total || 0, sent = o.sent || 0;
+  const times = (o.lists || []).flatMap(l => [l.first_sent, l.last_sent]).filter(Boolean).sort();
+  const first = times[0], last = times[times.length - 1];
+  let eta = "";
+  if (o.state === "sending" && total > sent) {
+    const from = Math.max(last ? Date.parse(last) : 0, Date.now());
+    eta = clock(new Date(from + (total - sent) * SEND_GAP * 1000).toISOString());
+  }
+  const facts = [first && ["Started", clock(first)], last && ["Last send", clock(last)], eta && ["Done by about", eta],
+    o.tries > 1 && o.state !== "done" && ["Tries", `${o.tries} of 3`]].filter(Boolean);
+  const people = (o.lists || []).map(l => `<div class="section"><div class="head"><h2>${esc(l.label)}</h2><span class="n">${l.sent} of ${l.total}</span></div>
+    <div class="rows">${l.people.map(p => `<div class="orow${p.sent_at ? "" : " queued"}"${p.id ? ` data-id="${p.id}"` : ""}>
+      <span class="nm"><b>${esc(p.person || p.name || p.email)}</b><span class="co">${esc(p.company)}</span></span>
+      <span class="${p.sent_at ? "" : "muted"}">${p.sent_at ? clock(p.sent_at) : "Queued"}</span></div>`).join("")}</div></div>`).join("");
+  const days = (o.upcoming || []).map(d => `<div class="oday${d.bumps ? "" : " none"}"><b>${d.bumps}</b><span>${new Date(d.date + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span></div>`).join("");
+  $("#main").innerHTML = `<div class="section"><div class="head"><h2>Outreach today</h2><div class="grow"></div><span class="muted">${esc(o.window || "")}</span></div>
+    <div class="obox ${cls}">
+      <div class="obig"><b>${sent}</b><span>of ${total} sent</span></div>
+      <div class="otrack" role="progressbar" aria-label="Emails sent today" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${sent}"><i style="transform: scaleX(${total ? sent / total : 0})"></i></div>
+      <p class="ostate">${esc(words)}</p>
+      ${facts.length ? `<dl class="ofacts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
+    </div></div>
+    ${days ? `<div class="section"><div class="head"><h2>Next 5 weekdays</h2><div class="grow"></div>
+      <span class="muted">${o.bumps_waiting ?? 0} ${o.bumps_waiting === 1 ? "person is" : "people are"} still owed a bump</span></div>
+      <div class="odays">${days}</div><p class="muted note">Bumps expected each weekday, ${o.per_day || 50} a day at most. When these hit zero, the bump backlog is used up.</p></div>` : ""}
+    ${people || (["weekend", "waiting", "nothing_due"].includes(o.state) ? "" : `<div class="empty">No list for today.</div>`)}`;
 }
 
 // ---- overview: the numbers, warm leads, a calling session, then the rest of today -------------------
@@ -1338,6 +1409,11 @@ const typing = () => document.activeElement?.matches("input:not(#q):not([type=da
 const busy = () => typing() || state.pick || state.view === "strategies" || pendingSaves.size;
 async function autoRefresh() {
   if (document.hidden || !state.ws || !state.board || busy()) return;
+  if (state.view === "outreach" && !$("#drawer").classList.contains("open")) {
+    let o; try { o = await api("/api/outreach-today"); } catch (e) { return; }
+    if (JSON.stringify(o) !== state.outreachKey) { state.outreach = o; state.outreachKey = JSON.stringify(o); renderOutreach(o); }
+    return;
+  }
   const q = encodeURIComponent($("#q").value.trim());
   let b; try { const r = await fetch(`/api/board?workspace=${state.ws}&q=${q}`); if (!r.ok) return; b = await r.json(); } catch (e) { return; }
   const s = JSON.stringify(b);

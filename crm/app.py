@@ -298,6 +298,35 @@ async def api_board(request):
     return r
 
 
+# Today's automatic Terms email send. The outreach chat owns the script; it reads its own send logs and prints JSON.
+OUTREACH_STATUS = Path(__file__).resolve().parents[3] / "Terms" / "Deepline" / "outreach_status.py"
+
+
+@mcp.custom_route("/api/outreach-today", methods=["GET"])
+@_safe
+async def api_outreach_today(request):
+    if not OUTREACH_STATUS.exists():
+        return {"state": "unavailable", "error": "The outreach status script isn't there."}
+    r = subprocess.run(["/usr/bin/python3", "-I", str(OUTREACH_STATUS)], capture_output=True, text=True, timeout=30,
+                       cwd=str(OUTREACH_STATUS.parent))
+    try:
+        out = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return {"state": "unavailable", "error": (r.stderr or "No answer from the outreach status script").strip()[-300:]}
+    # match each person to their CRM contact, so the page can open their profile and show their full name
+    con = db.connect()
+    try:
+        for lst in out.get("lists", []):
+            for p in lst.get("people", []):
+                row = con.execute("SELECT c.id, c.person, c.company FROM contacts c JOIN workspaces w ON w.id = c.workspace_id "
+                                  "WHERE w.slug = 'terms' AND lower(c.email) = ?", ((p.get("email") or "").lower(),)).fetchone()
+                if row:
+                    p.update(id=row["id"], person=row["person"], company=p.get("company") or row["company"])
+    finally:
+        con.close()
+    return out
+
+
 @mcp.custom_route("/api/due", methods=["GET"])
 @_safe
 async def api_due(request):
