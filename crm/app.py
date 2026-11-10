@@ -43,6 +43,9 @@ mcp = FastMCP(
 )
 
 
+db.ACTOR.set("claude")
+
+
 def _with(fn, *a, **kw):
     con = db.connect()
     try:
@@ -114,6 +117,26 @@ def log_touch(contact_id: int, kind: str, summary: str, at: str = "", reply_text
     For a reply, pass everything they wrote as reply_text (and the email's subject): the person panel shows it at
     the top and the lists show a preview."""
     return _slim(_with(db.log_touch, contact_id, kind, summary, at or None, "claude", reply_text, subject))
+
+
+@mcp.tool()
+def recent_changes(workspace: str = "", actor: str = "", since: str = "", contact_id: int = 0, limit: int = 100) -> list[dict]:
+    """The change history, newest first: who changed which person and what changed. actor is web (Sean on the
+    page), claude, task (scripts), inbox or sender; since is YYYY-MM-DD."""
+    return _with(db.list_changes, workspace or None, actor or None, since or None, None, contact_id or None, limit)
+
+
+@mcp.tool()
+def undo_changes(change_id: int = 0, actor: str = "", since: str = "", until: str = "", workspace: str = "",
+                 preview: bool = True) -> dict:
+    """Undo one change (change_id), putting that person back as they were just before it (later changes to them
+    go too), or everything one actor did from since to until (YYYY-MM-DD). People someone else changed afterwards
+    are skipped. With an actor, preview=True (the default) only lists what would happen; ask Sean before preview=False."""
+    if change_id:
+        return _with(db.undo_change, change_id, "claude")
+    if not actor or not since:
+        raise ValueError("Pass a change_id, or an actor and a since date")
+    return _with(db.undo_actor, actor, since, until or None, workspace or None, preview, "claude")
 
 
 @mcp.tool()
@@ -240,6 +263,7 @@ async def _body(request):
 
 def _safe(fn):
     async def handler(request: Request):
+        db.ACTOR.set("web")  # everything done from the page is Sean's; MCP tools keep the "claude" default
         try:
             return _json(await fn(request))
         except ValueError as e:
@@ -331,6 +355,28 @@ async def api_outreach_today(request):
     finally:
         con.close()
     return out
+
+
+@mcp.custom_route("/api/changes", methods=["GET"])
+@_safe
+async def api_changes(request):
+    q = request.query_params
+    return _with(db.list_changes, q.get("workspace") or None, q.get("actor") or None, q.get("since") or None,
+                 q.get("until") or None, int(q.get("contact") or 0) or None, int(q.get("limit") or 300))
+
+
+@mcp.custom_route("/api/changes/{hid:int}/undo", methods=["POST"])
+@_safe
+async def api_undo_change(request):
+    return _with(db.undo_change, request.path_params["hid"], "web")
+
+
+@mcp.custom_route("/api/changes/undo-actor", methods=["POST"])
+@_safe
+async def api_undo_actor(request):
+    b = await _body(request)
+    return _with(db.undo_actor, b["actor"], b["since"], b.get("until") or None, b.get("workspace") or None,
+                 bool(b.get("preview", True)), "web")
 
 
 @mcp.custom_route("/api/due", methods=["GET"])

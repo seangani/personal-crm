@@ -205,6 +205,14 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .place .i { width: 14px; height: 14px; }
 .progress { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: var(--text-sm); }
 .track { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: clip; }
+.hday { font-size: var(--text-sm); font-weight: 600; color: var(--muted); margin: 16px 0 4px; }
+.hrow { display: grid; grid-template-columns: 72px auto minmax(140px, 1fr) minmax(0, 2.4fr) 56px; gap: 4px 12px; align-items: baseline;
+  padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: var(--text-sm); cursor: pointer; }
+.hrow:hover { background: var(--soft); }
+.hrow .ht { color: var(--muted); font-variant-numeric: tabular-nums; } .hrow .co { margin-left: 8px; color: var(--muted); }
+.hwho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hwhat { min-width: 0; overflow-wrap: anywhere; }
+.hact { justify-self: end; } .hrow.undone .hwhat, .hrow.undone .hwho { color: var(--muted); text-decoration: line-through; }
+@media (max-width: 720px) { .hrow { grid-template-columns: auto auto minmax(0, 1fr) auto; } .hrow .hwhat { grid-column: 1 / -1; } }
 .obox { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 20px; --obar: var(--muted); }
 .obox.sending { --obar: var(--accent); } .obox.done { --obar: var(--ok); } .obox.stopped { --obar: var(--dead); }
 .obig { display: flex; gap: 8px; align-items: baseline; } .obig b { font-size: var(--text-2xl); font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -408,6 +416,7 @@ textarea.short { min-height: 72px; }
     <button data-v="all">Everyone</button>
     <button data-v="strategies">Strategies</button>
     <button data-v="outreach" hidden>Outreach today</button>
+    <button data-v="history">History</button>
   </nav>
   <div class="grow"></div>
   <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
@@ -623,7 +632,45 @@ function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
   if (!state.board) return;
   cleanFilters();
-  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach })[state.view]();
+  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory })[state.view]();
+}
+
+// ---- history: every change to a person, who made it, and undo -------------------------------------------
+const WHO = [["", "Everyone"], ["web", "You, on the page"], ["claude", "Claude"], ["task,script", "Scripts"], ["inbox", "Inbox check"], ["sender", "Daily send"]];
+const SPAN = [["0", "Today"], ["1", "Yesterday"], ["7", "Last 7 days"], ["30", "Last 30 days"]];
+if (!state.hist) state.hist = { who: "", span: "0" };
+function histRange() {
+  const n = Number(state.hist.span);
+  return n === 1 ? [inDays(-1), inDays(-1)] : [inDays(-n), ""];
+}
+async function renderHistory(rows) {
+  const h = state.hist, [since, until] = histRange();
+  if (!rows) {
+    const q = new URLSearchParams({ workspace: state.ws, actor: h.who, since, until, limit: 500 });
+    try { rows = await api(`/api/changes?${q}`); } catch (e) { return; }
+    state.histKey = JSON.stringify(rows);
+    if (state.view !== "history") return;
+  }
+  const sel = (key, opts, val, label) => `<label class="vh" for="h-${key}">${label}</label><select id="h-${key}" data-hist="${key}" class="${val && val !== "0" ? "set" : ""}">${opts.map(([v, l]) =>
+    `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const who = WHO.find(w => w[0] === h.who)?.[1], spanWord = SPAN.find(s => s[0] === h.span)[1].toLowerCase();
+  const undoable = rows.filter(r => r.can_undo).length;
+  const bulk = h.who && undoable ? `<button class="btn sm danger" id="undoAll" type="button">Undo all ${undoable} by ${esc(who)}, ${esc(spanWord)}</button>` : "";
+  // a later change to the same person goes too when an earlier one is undone
+  const laterOf = r => rows.filter(x => x.contact_id === r.contact_id && x.id > r.id && !x.undone_by).length;
+  let day = "";
+  const list = rows.map(r => {
+    const d = r.at.slice(0, 10), head = d !== day ? `<h3 class="hday">${d === today() ? "Today" : d === inDays(-1) ? "Yesterday" : fmt(d)}</h3>` : "";
+    day = d;
+    return `${head}<div class="hrow${r.undone_by ? " undone" : ""}" data-id="${r.contact_id}">
+      <span class="ht">${clock(r.at)}</span><span class="pill">${esc(r.who)}</span>
+      <span class="hwho"><b>${esc(r.person || r.company)}</b>${r.person ? `<span class="co">${esc(r.company)}</span>` : ""}</span>
+      <span class="hwhat">${esc(r.what)}</span>
+      <span class="hact">${r.undone_by ? `<span class="muted">Undone</span>` : r.can_undo ? `<button class="link" type="button" data-hundo="${r.id}" data-later="${laterOf(r)}">Undo</button>` : ""}</span></div>`;
+  }).join("");
+  $("#main").innerHTML = `<div class="filters">${sel("who", WHO, h.who, "Who")}${sel("span", SPAN, h.span, "When")}<span class="count">${rows.length} change${rows.length === 1 ? "" : "s"}</span><div class="grow"></div>${bulk}</div>
+    <p class="muted note">Every change to a person, newest first. Undo puts them back exactly as they were before it; anything changed after it on that person goes too. Undoing is itself a change, so it can be undone.</p>
+    <div class="hist">${list || `<div class="empty">No changes ${esc(spanWord)}${who && h.who ? ` by ${esc(who)}` : ""}.</div>`}</div>`;
 }
 
 // ---- outreach today: the automatic daily email send (the outreach chat's script says how it's going) -------
@@ -1322,6 +1369,22 @@ document.addEventListener("click", async e => {
   if (e.target.closest("a")) return;
   const em = e.target.closest("[data-email]");
   if (em) return openEmail(em.dataset.email, em.dataset.sid);
+  const hu = e.target.closest("[data-hundo]");
+  if (hu) {
+    const later = Number(hu.dataset.later), name = hu.closest(".hrow").querySelector(".hwho b").textContent;
+    if (later && !confirm(`This also undoes ${later} later change${later > 1 ? "s" : ""} to ${name}, since undo puts them back exactly as they were. Go ahead?`)) return;
+    const r = await api(`/api/changes/${hu.dataset.hundo}/undo`, { method: "POST" }); toast(`Undone${r.undone > 1 ? ` (${r.undone} changes)` : ""}`);
+    await load(); return;
+  }
+  if (e.target.closest("#undoAll")) {
+    const [since, until] = histRange(), body = { actor: state.hist.who, since, until, workspace: state.ws };
+    const p = await api("/api/changes/undo-actor", { method: "POST", body: { ...body, preview: true } });
+    if (!p.people.length) return toast(p.skipped.length ? "Everyone they changed was changed again by someone else, so nothing to undo" : "Nothing to undo");
+    const skip = p.skipped.length ? `\n\nLeft alone, because someone else changed them afterwards: ${p.skipped.map(x => x.person).join(", ")}.` : "";
+    if (!confirm(`Put ${p.people.length} ${p.people.length === 1 ? "person" : "people"} back as they were (${p.changes} change${p.changes === 1 ? "" : "s"}): ${p.people.slice(0, 12).map(x => x.person).join(", ")}${p.people.length > 12 ? ", and more" : ""}.${skip}`)) return;
+    const r = await api("/api/changes/undo-actor", { method: "POST", body: { ...body, preview: false } });
+    toast(`Put back ${r.people.length} ${r.people.length === 1 ? "person" : "people"}`); await load(); return;
+  }
   const lf = e.target.closest("[data-logfor]");
   if (lf) { await openContact(lf.dataset.logfor); const s = $("#summary"); s?.scrollIntoView({ block: "center" }); return s?.focus({ preventScroll: true }); }
   const opener = e.target.closest("[data-open]");
@@ -1387,6 +1450,7 @@ document.addEventListener("click", async e => {
 });
 document.addEventListener("input", e => { if (e.target.id === "callNote") state.pickNote = e.target.value; });
 document.addEventListener("change", e => {
+  if (e.target.dataset?.hist) { state.hist[e.target.dataset.hist] = e.target.value; return renderHistory(); }
   if (e.target.id === "stratPick") { const v = e.target.value; state.stratOpen = v === "new" ? "new" : v ? Number(v) : null; return render(); }
   const k = e.target.dataset?.f;
   if (k) { if (k.startsWith("c:")) state.f.custom[k.slice(2)] = e.target.value; else state.f[k] = e.target.value; savePrefs(); return render(); }
@@ -1415,6 +1479,12 @@ const typing = () => document.activeElement?.matches("input:not(#q):not([type=da
 const busy = () => typing() || state.pick || state.view === "strategies" || pendingSaves.size;
 async function autoRefresh() {
   if (document.hidden || !state.ws || !state.board || busy()) return;
+  if (state.view === "history" && !$("#drawer").classList.contains("open")) {
+    const [since, until] = histRange(), q = new URLSearchParams({ workspace: state.ws, actor: state.hist.who, since, until, limit: 500 });
+    let rows; try { rows = await api(`/api/changes?${q}`); } catch (e) { return; }
+    if (JSON.stringify(rows) !== state.histKey) { state.histKey = JSON.stringify(rows); renderHistory(rows); }
+    return;
+  }
   if (state.view === "outreach" && !$("#drawer").classList.contains("open")) {
     let o; try { o = await api("/api/outreach-today"); } catch (e) { return; }
     if (JSON.stringify(o) !== state.outreachKey) { state.outreach = o; state.outreachKey = JSON.stringify(o); renderOutreach(o); }

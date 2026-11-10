@@ -126,6 +126,7 @@ def connect():
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA journal_mode = WAL")
     con.executescript(SCHEMA)
+    con.executescript(CHANGES_SQL)
     if "after_call" not in {r["name"] for r in con.execute("PRAGMA table_info(workspaces)")}:
         con.execute("ALTER TABLE workspaces ADD COLUMN after_call TEXT DEFAULT ''")
     tcols = {r["name"] for r in con.execute("PRAGMA table_info(touches)")}
@@ -514,6 +515,7 @@ def add_contact(con, workspace, company, person="", stage=None, source="", strat
         "role, email, phone, mobile, website, notes, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (ws["id"], company, person or "", stage, t[:10], source, json.dumps(custom), t, t, *cols.values()))
     con.commit()
+    _record(con, source or ACTOR.get() or "script", cur.lastrowid, None)
     if strategy:
         return apply_strategy(con, cur.lastrowid, strategy, source=source or "claude")
     return get_contact(con, cur.lastrowid)
@@ -1007,3 +1009,248 @@ def overview(con, workspace, query=""):
             c["current"]["body"] = s["body"]  # talking points for the call session
     return {"stages": pipeline(con, workspace), "contacts": contacts, "stats": strategy_stats(con, workspace),
             "strategies": list_strategies(con, workspace)}
+
+
+# ---- change history ------------------------------------------------------------------------------
+# Every change to a person is kept with who made it and how they stood just before, so any change (or
+# everything one actor did in a time window) can be undone. Actors: web (Sean on the page), claude (Claude
+# through MCP), task (the command line and scheduled scripts), inbox (the reply checker), sender (the daily
+# send's logging), script (anything else).
+import contextvars
+import functools
+import inspect
+
+ACTOR = contextvars.ContextVar("crm_actor", default=None)  # set by the web routes, MCP tools and the CLI
+_DEPTH = contextvars.ContextVar("crm_change_depth", default=0)
+ACTORS = {"web": "You, on the page", "claude": "Claude", "task": "Scripts", "inbox": "Inbox check", "sender": "Daily send",
+          "import": "Import", "script": "Scripts"}
+
+CHANGES_SQL = """
+CREATE TABLE IF NOT EXISTS changes (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    contact_id INTEGER NOT NULL,
+    what TEXT NOT NULL,            -- plain words, worked out by comparing before and after
+    before TEXT,                   -- JSON: the contact row, its steps and its last timeline entry id, just before
+    undone_by INTEGER              -- the change that undid this one
+);
+CREATE INDEX IF NOT EXISTS changes_contact ON changes(contact_id, id);
+CREATE INDEX IF NOT EXISTS changes_at ON changes(at);
+"""
+
+
+def _snapshot(con, contact_id):
+    row = con.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
+    if not row:
+        return None
+    return {"contact": dict(row), "steps": [dict(r) for r in con.execute("SELECT * FROM steps WHERE contact_id = ? ORDER BY id", (contact_id,))],
+            "touch": con.execute("SELECT coalesce(max(id), 0) FROM touches WHERE contact_id = ?", (contact_id,)).fetchone()[0]}
+
+
+
+def _short(s, n=90):
+    s = " ".join((s or "").split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+FIELD_WORDS = {"hold_until": "hold date", "ai_state": "AI mark", "next_draft": "draft", "strategy_id": "strategy"}
+
+
+def _describe(con, before, after):
+    """What changed, in plain words, from two snapshots."""
+    out = []
+    b, a = before["contact"], after["contact"]
+    if b["stage"] != a["stage"]:
+        out.append(f"Stage {b['stage']} → {a['stage']}")
+    skip = {"stage", "stage_changed", "updated", "next_step", "next_due", "ai_note", "ai_at"}
+    fields = [FIELD_WORDS.get(k, k.replace("_", " ")) for k in a if k not in skip and b.get(k) != a.get(k)]
+    if fields:
+        out.append("Changed " + ", ".join(fields))
+    for t in con.execute("SELECT kind, summary FROM touches WHERE contact_id = ? AND id > ? AND kind != 'stage' ORDER BY id",
+                         (a["id"], before["touch"])):
+        out.append(f"Logged {t['kind']}" + (f": {_short(t['summary'])}" if t["summary"] else ""))
+    bs = {s["id"]: s for s in before["steps"]}
+    as_ = {s["id"]: s for s in after["steps"]}
+    label = lambda s: s["title"] or TYPE_WORDS.get(s["type"], s["type"])
+    added = [s for i, s in as_.items() if i not in bs]
+    gone = [s for i, s in bs.items() if i not in as_]
+    moved = {}
+    redated = 0
+    for i, s in as_.items():
+        if i in bs:
+            if bs[i]["status"] != s["status"]:
+                moved.setdefault(s["status"], []).append(label(s))
+            elif bs[i]["due"] != s["due"]:
+                redated += 1
+    if added:
+        out.append("Added " + ", ".join(label(s) + (f" ({s['due']})" if s["due"] else "") for s in added[:3])
+                   + (f" and {len(added) - 3} more" if len(added) > 3 else ""))
+    if gone:
+        out.append(f"Removed {len(gone)} step{'s' * (len(gone) > 1)}")
+    words = {"done": "Done", "skipped": "Skipped", "paused": "Paused", "planned": "Back to planned"}
+    for st, names in moved.items():
+        out.append(f"{words.get(st, st)}: " + (", ".join(names[:3]) if len(names) <= 3 else f"{len(names)} steps"))
+    if redated:
+        out.append(f"Re-dated {redated} step{'s' * (redated > 1)}")
+    return "; ".join(out)
+
+
+TYPE_WORDS = {"email": "Email", "call": "Call", "text": "Text", "linkedin": "LinkedIn", "meeting": "Meeting", "task": "To do", "close": "Close"}
+
+
+def _record(con, actor, contact_id, before, what=None):
+    after = _snapshot(con, contact_id)
+    if after is None:
+        return None
+    what = what or (_describe(con, before, after) if before else f"Added {after['contact']['person'] or after['contact']['company']}")
+    if not what:
+        return None  # nothing actually changed
+    cur = con.execute("INSERT INTO changes (at, actor, contact_id, what, before) VALUES (?, ?, ?, ?, ?)",
+                      (now(), actor, contact_id, what, json.dumps(before) if before else None))
+    con.commit()
+    return cur.lastrowid
+
+
+def _contact_of(con, name, value):
+    if name == "contact_id":
+        return value
+    if value is not None and value < 0:  # a kill's undo is kept under minus the contact id
+        return -value
+    r = con.execute("SELECT contact_id FROM steps WHERE id = ?", (value,)).fetchone()
+    if r:
+        return r[0]
+    u = con.execute("SELECT data FROM undo WHERE step_id = ?", (value,)).fetchone()
+    return json.loads(u[0])["contact"] if u else None
+
+
+def _recorded(fn):
+    """Keep a history entry for each outermost call that changes a person."""
+    sig = inspect.signature(fn)
+    key = "contact_id" if "contact_id" in sig.parameters else "step_id"
+
+    @functools.wraps(fn)
+    def run(con, *a, **kw):
+        if _DEPTH.get():
+            return fn(con, *a, **kw)
+        args = sig.bind(con, *a, **kw).arguments
+        actor = args.get("source") or ACTOR.get() or sig.parameters.get("source", inspect.Parameter("x", 1, default="script")).default or "script"
+        cid = _contact_of(con, key, args.get(key))
+        before = _snapshot(con, cid) if cid else None
+        tok = _DEPTH.set(1)
+        try:
+            result = fn(con, *a, **kw)
+        finally:
+            _DEPTH.reset(tok)
+        if before:
+            _record(con, actor, cid, before)
+        return result
+    return run
+
+
+def _restore(con, before):
+    c = before["contact"]
+    cid = c["id"]
+    cols = [k for k in c if k not in ("id", "updated")]
+    have = {r["name"] for r in con.execute("PRAGMA table_info(contacts)")}
+    cols = [k for k in cols if k in have]
+    con.execute(f"UPDATE contacts SET {', '.join(f'{k} = ?' for k in cols)}, updated = ? WHERE id = ?",
+                (*[c[k] for k in cols], now(), cid))
+    keep = [s["id"] for s in before["steps"]]
+    con.execute(f"DELETE FROM steps WHERE contact_id = ? AND id NOT IN ({','.join('?' * len(keep)) or 'NULL'})", (cid, *keep))
+    scols = {r["name"] for r in con.execute("PRAGMA table_info(steps)")}
+    for s in before["steps"]:
+        ks = [k for k in s if k in scols]
+        con.execute(f"INSERT OR REPLACE INTO steps ({', '.join(ks)}) VALUES ({', '.join('?' * len(ks))})", [s[k] for k in ks])
+    con.execute("DELETE FROM touches WHERE contact_id = ? AND id > ?", (cid, before["touch"]))
+    tcols = {r["name"] for r in con.execute("PRAGMA table_info(touches)")}
+    for t in before.get("touches_back", []):  # timeline entries an undo removed, put back when that undo is undone
+        ks = [k for k in t if k in tcols]
+        if con.execute("SELECT 1 FROM touches WHERE id = ?", (t["id"],)).fetchone():  # its id was reused since
+            ks.remove("id")
+        con.execute(f"INSERT INTO touches ({', '.join(ks)}) VALUES ({', '.join('?' * len(ks))})", [t[k] for k in ks])
+    con.execute("DELETE FROM undo WHERE json_extract(data, '$.contact') = ?", (cid,))  # call-session undos would now be wrong
+
+
+def _change_dict(row):
+    d = {k: row[k] for k in ("id", "at", "actor", "contact_id", "what", "undone_by")}
+    d["who"] = ACTORS.get(d["actor"], d["actor"])
+    d["can_undo"] = row["before"] is not None and not row["undone_by"]
+    for k in ("person", "company"):
+        if k in row.keys():
+            d[k] = row[k]
+    return d
+
+
+def list_changes(con, workspace=None, actor=None, since=None, until=None, contact_id=None, limit=300):
+    """Recent changes, newest first. since/until are YYYY-MM-DD (until inclusive)."""
+    sql = ("SELECT h.*, c.person, c.company FROM changes h JOIN contacts c ON c.id = h.contact_id "
+           "JOIN workspaces w ON w.id = c.workspace_id WHERE 1=1")
+    args = []
+    if workspace:
+        sql += " AND w.slug = ?"; args.append(workspace)
+    if actor:
+        sql += " AND h.actor IN (" + ",".join("?" * len(actor.split(","))) + ")"; args += actor.split(",")
+    if since:
+        sql += " AND h.at >= ?"; args.append(since)
+    if until:
+        sql += " AND h.at < ?"; args.append((date.fromisoformat(until[:10]) + timedelta(days=1)).isoformat())
+    if contact_id:
+        sql += " AND h.contact_id = ?"; args.append(contact_id)
+    return [_change_dict(r) for r in con.execute(sql + " ORDER BY h.id DESC LIMIT ?", (*args, limit))]
+
+
+def undo_change(con, change_id, actor="web"):
+    """Put a person back the way they were just before this change. Later changes to the same person are
+    undone too (the result says how many). The undo is itself a change, so it can be undone."""
+    h = con.execute("SELECT * FROM changes WHERE id = ?", (change_id,)).fetchone()
+    if not h:
+        raise ValueError(f"No change {change_id}")
+    if h["undone_by"]:
+        raise ValueError("That change was already undone.")
+    if not h["before"]:
+        raise ValueError("Adding a person can't be undone here. Kill them instead, or ask Claude.")
+    cid = h["contact_id"]
+    later = con.execute("SELECT count(*) FROM changes WHERE contact_id = ? AND id > ? AND undone_by IS NULL",
+                        (cid, change_id)).fetchone()[0]
+    before = json.loads(h["before"])
+    now_snap = _snapshot(con, cid)
+    now_snap["touches_back"] = [dict(r) for r in con.execute("SELECT * FROM touches WHERE contact_id = ? AND id > ?",
+                                                                (cid, before["touch"]))]
+    _restore(con, before)
+    _sync_next(con, cid)
+    con.commit()
+    what = f"Put back: {h['what'][6:]}" if h["what"].startswith("Undid: ") else f"Undid: {_short(h['what'], 120)}"
+    new = _record(con, actor, cid, now_snap, what + (f" (and {later} later change{'s' * (later > 1)})" if later else ""))
+    con.execute("UPDATE changes SET undone_by = ? WHERE contact_id = ? AND id >= ? AND id != ? AND undone_by IS NULL",
+                (new, cid, change_id, new))
+    con.commit()
+    return {"undone": 1 + later, "contact": get_contact(con, cid, with_touches=False)}
+
+
+def undo_actor(con, actor, since, until=None, workspace=None, preview=True, by="web"):
+    """Undo everything one actor did in a time window, person by person. Someone changed afterwards by another
+    actor is left alone and listed under skipped. preview=True only says what would happen."""
+    rows = list(reversed(list_changes(con, workspace, actor, since, until, limit=5000)))
+    first, count = {}, {}
+    for r in rows:
+        if r["can_undo"]:
+            first.setdefault(r["contact_id"], r)
+            count[r["contact_id"]] = count.get(r["contact_id"], 0) + 1
+    todo, skipped = [], []
+    for cid, r in first.items():
+        mine = actor.split(",")
+        other = con.execute(f"SELECT 1 FROM changes WHERE contact_id = ? AND id > ? AND undone_by IS NULL "
+                            f"AND actor NOT IN ({','.join('?' * len(mine))})", (cid, r["id"], *mine)).fetchone()
+        item = {"contact_id": cid, "person": r["person"] or r["company"], "changes": count[cid], "first": r["what"]}
+        (skipped if other else todo).append(item)
+    if not preview:
+        for item in todo:
+            undo_change(con, first[item["contact_id"]]["id"], by)
+    return {"people": todo, "skipped": skipped, "changes": sum(i["changes"] for i in todo), "done": not preview}
+
+
+# record these (assigned here, after they're defined, so calls inside this module are recorded too)
+for _name in ("update_contact", "mark_ai", "move_stage", "log_touch", "log_call", "add_step", "edit_step", "delete_step",
+              "skip_step", "complete_step", "apply_strategy", "set_next_step", "finish_step_of_type", "kill", "undo_step"):
+    globals()[_name] = _recorded(globals()[_name])

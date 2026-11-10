@@ -119,6 +119,7 @@ def main():
     s.add_argument("--state", required=True, choices=["seen", "batch", "clear"]); s.add_argument("--note", default="")
     s = sub.add_parser("hold"); s.add_argument("id", type=int); s.add_argument("until", help="YYYY-MM-DD, or none to clear")
     a = p.parse_args()
+    db.ACTOR.set("task")  # changes made here show as Scripts in the history
 
     con = db.connect()
     try:
