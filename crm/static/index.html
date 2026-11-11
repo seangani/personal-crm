@@ -213,6 +213,37 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .hwho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hwhat { min-width: 0; overflow-wrap: anywhere; }
 .hact { justify-self: end; } .hrow.undone .hwhat, .hrow.undone .hwho { color: var(--muted); text-decoration: line-through; }
 @media (max-width: 720px) { .hrow { grid-template-columns: auto auto minmax(0, 1fr) auto; } .hrow .hwhat { grid-column: 1 / -1; } }
+.convo { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 16px; }
+.clist { display: block; border-radius: 8px; background: var(--soft); overflow: clip; position: sticky; top: 16px; max-height: calc(100vh - 140px); overflow-y: auto; overscroll-behavior: contain; }
+.crow { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); padding: 12px 16px; cursor: pointer; font: inherit; }
+.crow:last-child { border-bottom: 0; } .crow:hover { background: var(--line); } .crow[aria-current="true"] { background: var(--accent-bg); }
+.crow .ct { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.crow .cn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .cm { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: var(--text-xs); color: var(--muted); }
+.crow .cm span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .pill { font-size: var(--text-xs); }
+.clist .empty { padding: 16px; }
+.thread { min-width: 0; }
+.thead { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; margin-bottom: 16px; }
+.thead h2 { margin: 0; } .thead .link { font-size: var(--text-sm); }
+.tlist { display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: min(640px, 88%); border: 1px solid var(--line); border-radius: 16px; padding: 12px 16px; background: var(--panel); font-size: var(--text-sm); }
+.msg.out { border-bottom-right-radius: 4px; align-self: flex-end; background: var(--accent-bg); border-color: transparent; }
+.msg.in { border-bottom-left-radius: 4px; align-self: flex-start; background: var(--hot-bg); border-color: transparent; }
+.msg .mh { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; color: var(--muted); font-size: var(--text-xs); }
+.msg .ms { font-weight: 600; color: var(--ink); margin-top: 4px; }
+.msg .mb { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg .mb.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.msg .link { margin-top: 4px; }
+.ev { align-self: center; display: inline-flex; gap: 8px; align-items: baseline; max-width: min(640px, 92%); font-size: var(--text-sm); color: var(--ink); }
+.ev .i { width: 16px; height: 16px; color: var(--muted); align-self: center; flex: none; } .ev .muted { white-space: nowrap; }
+.sdiv { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: var(--text-xs); }
+.sdiv::before, .sdiv::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.pinned { position: sticky; bottom: 0; margin-top: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); padding: 12px 16px; font-size: var(--text-sm); }
+.pinned .ph { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.pinned .mb { margin: 8px 0 0; white-space: pre-wrap; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.pinned .row { margin-top: 8px; }
+@media (max-width: 860px) { .convo { grid-template-columns: minmax(0, 1fr); } .clist { position: static; max-height: 320px; } .pinned { position: static; } }
 .obox { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 20px; --obar: var(--muted); }
 .obox.sending { --obar: var(--accent); } .obox.done { --obar: var(--ok); } .obox.stopped { --obar: var(--dead); }
 .obig { display: flex; gap: 8px; align-items: baseline; } .obig b { font-size: var(--text-2xl); font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -414,6 +445,7 @@ textarea.short { min-height: 72px; }
     <button data-v="overview" class="on">Overview</button>
     <button data-v="board">Pipeline</button>
     <button data-v="all">Everyone</button>
+    <button data-v="convo">Conversations</button>
     <button data-v="strategies">Strategies</button>
     <button data-v="outreach" hidden>Outreach today</button>
     <button data-v="history">History</button>
@@ -632,7 +664,80 @@ function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
   if (!state.board) return;
   cleanFilters();
-  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory })[state.view]();
+  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory, convo: renderConvo })[state.view]();
+}
+
+// ---- conversations: each warm lead's whole back-and-forth as one thread ----------------------------------
+// warm or recently live: any warm stage (Call back, Replied, Interested and on), Not now, or Priority FOCUS/HOT; never closed
+const CONVO_STAGES = new Set(["Not now"]);
+const SEND_KINDS = new Set(["email", "bump"]), EVENT_ICON = { call: "call", voicemail: "call", text: "text", linkedin: "linkedin", meeting: "meeting", note: "task" };
+const NOT_REPLY = /^(bounced|auto-reply|out of (the )?office)/i;
+function convoPeople() {
+  const info = stageInfo();
+  return state.board.contacts.filter(c => info[c.stage]?.kind !== "closed" &&
+    (info[c.stage]?.hot || CONVO_STAGES.has(c.stage) || /^(focus|hot)/i.test(priorityOf(c))))
+    .sort((a, b) => (b.last_touch || "") < (a.last_touch || "") ? -1 : (b.last_touch || "") > (a.last_touch || "") ? 1 : 0);
+}
+const lowerKind = k => ({ voicemail: "voicemail", bump: "bump" })[k] || kindLabel(k).toLowerCase();
+function convoRow(c) {
+  const pr = priorityOf(c), badge = /^(focus|hot)/i.test(pr) ? `<span class="pill hot">${icon("hot")}${esc(pr.split(/\s/)[0].toUpperCase())}</span>` : "";
+  const nx = c.current ? `Next: ${c.current.label || TYPES[c.current.type]}${c.current.due ? ` ${fmt(c.current.due)}` : ""}` : "No next step";
+  return `<button class="crow" type="button" data-convo="${c.id}" aria-current="${state.convo === c.id}">
+    <span class="ct"><b class="cn">${esc(c.person || c.company)}</b>${badge}</span>
+    <span class="cm"><span>${c.person ? esc(c.company) : ""}</span><span>${stagePill(c)}</span>
+      <span>${c.last_touch ? `Last: ${esc(lowerKind(c.last_kind))} ${fmt(c.last_touch)}` : "No contact yet"}</span><span>${esc(nx)}</span></span></button>`;
+}
+function convoItem(t) {
+  const when = `${fmt(t.at)}${t.at.length > 10 ? `, ${clock(t.at)}` : ""}`;
+  if (t.kind === "stage") return `<div class="sdiv">${esc(t.summary)}, ${fmt(t.at)}</div>`;
+  const body = (t.detail || "").trim(), open = state.convoOpen.has(t.id);
+  const text = (txt) => {
+    const long = txt.split("\n").length > 3 || txt.length > 260;
+    return `<p class="mb${long && !open ? " clamp" : ""}">${esc(txt)}</p>${long ? `<button class="link" type="button" data-cexp="${t.id}">${open ? "Show less" : "Show all"}</button>` : ""}`;
+  };
+  if (SEND_KINDS.has(t.kind)) {
+    return `<div class="msg out"><div class="mh"><span>You, ${t.kind === "bump" ? "bump" : "email"}</span><span>${when}</span></div>
+      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${body ? text(body) : `<p class="mb">${esc(t.summary)}</p>`}</div>`;
+  }
+  if (t.kind === "reply" && !NOT_REPLY.test(t.summary || "")) {
+    const txt = replyText(t);
+    return `<div class="msg in"><div class="mh"><span>They replied</span><span>${when}</span></div>
+      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${text(txt || t.summary)}</div>`;
+  }
+  return `<div class="ev">${icon(EVENT_ICON[t.kind] || (t.kind === "reply" ? "alert" : "task"))}<span><b>${esc(kindLabel(t.kind))}</b> ${esc(t.summary)}</span><span class="muted">${when}</span></div>`;
+}
+function pinnedStep(c) {
+  const s = c.steps.filter(x => x.status === "planned").sort((a, b) => (a.due || "9") < (b.due || "9") ? -1 : 1)[0];
+  if (!s) return `<div class="pinned"><div class="ph"><span class="muted">No next step planned.</span><button class="btn sm" type="button" data-open="${c.id}">Add one in their profile</button></div></div>`;
+  const quick = ["email", "text", "linkedin", "task", "meeting"].includes(s.type);
+  return `<div class="pinned"><div class="ph">${icon(s.type)}<b>Next: ${esc(stepLabel(s))}</b>${s.due ? duePill(s.due, true, s.weekend) : `<span class="muted">No date</span>`}</div>
+    ${s.type === "email" && s.subject && !stepLabel(s).includes(s.subject) ? `<div class="ms">${esc(s.subject)}</div>` : ""}
+    ${s.body ? `<p class="mb">${esc(s.body)}</p>` : ""}
+    <div class="row">${quick ? `<button class="btn sm primary" type="button" data-cdone="${s.id}">${["email", "text", "linkedin"].includes(s.type) ? "Mark sent" : "Mark done"}</button>` : ""}
+      <button class="btn sm${quick ? "" : " primary"}" type="button" data-email="${c.id}" data-sid="${s.id}">${s.type === "call" ? "Log the call" : "Open or edit"}</button></div></div>`;
+}
+async function renderConvo() {
+  if (!state.convoOpen) state.convoOpen = new Set();
+  const people = convoPeople();
+  if (!people.some(c => c.id === state.convo)) state.convo = people[0]?.id || null;
+  const list = people.map(convoRow).join("");
+  const shell = (thread) => `<div class="section"><div class="head"><h2>Conversations</h2><div class="grow"></div><span class="count">${people.length} warm</span></div>
+    <p class="muted note">Everything you and each warm lead have said, oldest first, with the next step pinned at the bottom.</p>
+    <div class="convo"><div class="clist" role="region" aria-label="Warm leads">${list || `<div class="empty">No warm leads right now.</div>`}</div>
+    <div class="thread" id="thread">${thread}</div></div></div>`;
+  if (!state.convo) { $("#main").innerHTML = shell(""); return; }
+  const want = state.convo;
+  let c = state.convoCache?.id === want ? state.convoCache : null;
+  if (!c) { $("#main").innerHTML = shell(`<div class="empty">Loading...</div>`); }
+  try { c = await api(`/api/contacts/${want}`); } catch (e) { return; }
+  if (state.view !== "convo" || state.convo !== want) return;
+  state.convoCache = c;
+  const items = [...c.touches].reverse().map(convoItem).join("");
+  const y = window.scrollY;
+  $("#main").innerHTML = shell(`<div class="thead"><h2>${esc(c.person || c.company)}</h2>${c.person ? `<span class="muted">${esc(c.company)}</span>` : ""}${stagePill(c)}
+      <button class="link" type="button" data-open="${c.id}">Open profile</button></div>
+    <div class="tlist">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
+  window.scrollTo(0, y);
 }
 
 // ---- history: every change to a person, who made it, and undo -------------------------------------------
@@ -1385,6 +1490,12 @@ document.addEventListener("click", async e => {
     const r = await api("/api/changes/undo-actor", { method: "POST", body: { ...body, preview: false } });
     toast(`Put back ${r.people.length} ${r.people.length === 1 ? "person" : "people"}`); await load(); return;
   }
+  const cv = e.target.closest("[data-convo]");
+  if (cv) { state.convo = Number(cv.dataset.convo); state.convoOpen = new Set(); window.scrollTo(0, 0); return renderConvo(); }
+  const cx = e.target.closest("[data-cexp]");
+  if (cx) { const n = Number(cx.dataset.cexp); state.convoOpen.has(n) ? state.convoOpen.delete(n) : state.convoOpen.add(n); return renderConvo(); }
+  const cd = e.target.closest("[data-cdone]");
+  if (cd) { cd.disabled = true; await api(`/api/steps/${cd.dataset.cdone}/done`, { method: "POST", body: {} }); toast("Done"); return load(); }
   const lf = e.target.closest("[data-logfor]");
   if (lf) { await openContact(lf.dataset.logfor); const s = $("#summary"); s?.scrollIntoView({ block: "center" }); return s?.focus({ preventScroll: true }); }
   const opener = e.target.closest("[data-open]");

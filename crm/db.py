@@ -63,8 +63,8 @@ CREATE TABLE IF NOT EXISTS touches (
     kind TEXT NOT NULL,            -- email, bump, call, voicemail, reply, text, linkedin, meeting, note, stage
     summary TEXT DEFAULT '',
     source TEXT DEFAULT '',        -- who logged it: web, claude, import, sender, inbox
-    subject TEXT DEFAULT '',       -- for a reply: the email's subject
-    detail TEXT DEFAULT ''         -- for a reply: everything they wrote, the quoted original cut off
+    subject TEXT DEFAULT '',       -- email, bump or reply: the email's subject
+    detail TEXT DEFAULT ''         -- email or bump: the text Sean sent; reply: everything they wrote, the quoted original cut off
 );
 CREATE INDEX IF NOT EXISTS touches_contact ON touches(contact_id, at);
 CREATE TABLE IF NOT EXISTS strategies (
@@ -603,7 +603,8 @@ def move_stage(con, contact_id, stage, reason="", at=None, source="claude"):
 
 
 def log_touch(con, contact_id, kind, summary="", at=None, source="claude", detail="", subject=""):
-    """Add a timeline entry. For a reply, `detail` is the full text they wrote and `subject` its subject line."""
+    """Add a timeline entry. For an email or bump, `detail` is the text Sean sent; for a reply, everything they
+    wrote. `subject` is the email's subject line."""
     get_contact(con, contact_id, with_touches=False)
     con.execute("INSERT INTO touches (contact_id, at, kind, summary, source, detail, subject) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (contact_id, at or now(), kind, summary, source, detail or "", subject or ""))
@@ -779,7 +780,10 @@ def complete_step(con, step_id, outcome="", note="", source="web", at=None):
         kind = {"email": "email", "text": "text", "linkedin": "linkedin", "meeting": "meeting"}.get(s["type"], "note")
         what = f"Sent: {s['subject'] or label}" if s["type"] == "email" else f"Done: {label}"
         _finish(con, step_id, outcome or ("sent" if s["type"] in ("email", "text", "linkedin") else "done"), at)
-        log_touch(con, cid, kind, what + extra, at, source)
+        if s["type"] == "email":  # keep what was sent, for the Conversations thread
+            log_touch(con, cid, kind, what + extra, at, source, s["body"] or "", s["subject"] or "")
+        else:
+            log_touch(con, cid, kind, what + extra, at, source)
     _sync_next(con, cid)
     con.commit()
     c = get_contact(con, cid)
@@ -983,7 +987,7 @@ def overview(con, workspace, query=""):
                              f"ORDER BY due IS NULL, due, id", ids):
             cur.setdefault(r["contact_id"], dict(r))
         said = {}  # the latest real contact per person: when, and what was said
-        for r in con.execute(f"SELECT contact_id, at, summary FROM touches WHERE contact_id IN ({marks}) AND kind IN "
+        for r in con.execute(f"SELECT contact_id, at, kind, summary FROM touches WHERE contact_id IN ({marks}) AND kind IN "
                              f"('email', 'bump', 'call', 'voicemail', 'reply', 'text', 'linkedin', 'meeting') "
                              f"ORDER BY at, id", ids):
             said[r["contact_id"]] = r
@@ -1003,12 +1007,36 @@ def overview(con, workspace, query=""):
         c["last_update"] = upd.get(c["id"])
         c["last_reply"] = reply.get(c["id"])
         c["last_said"] = said[c["id"]]["summary"] if c["id"] in said else ""
+        c["last_kind"] = said[c["id"]]["kind"] if c["id"] in said else ""
         s = cur.get(c["id"])
         c["current"] = {k: s[k] for k in ("id", "type", "due", "subject", "weekend")} | {"label": step_label(s)} if s else None
         if s and s["type"] == "call":
             c["current"]["body"] = s["body"]  # talking points for the call session
     return {"stages": pipeline(con, workspace), "contacts": contacts, "stats": strategy_stats(con, workspace),
             "strategies": list_strategies(con, workspace)}
+
+
+def find_touches(con, contact_id, kind=None, on=None):
+    """A person's timeline entries with their ids, oldest first, optionally only one kind or one day (YYYY-MM-DD)."""
+    get_contact(con, contact_id, with_touches=False)
+    q, args = "SELECT id, at, kind, summary, subject, length(detail) AS text_len FROM touches WHERE contact_id = ?", [contact_id]
+    if kind:
+        q += " AND kind = ?"; args.append(kind)
+    if on:
+        q += " AND substr(at, 1, 10) = ?"; args.append(on[:10])
+    return [dict(r) for r in con.execute(q + " ORDER BY at, id", args)]
+
+
+def set_touch_detail(con, touch_id, subject=None, body=None):
+    """Fill in an existing timeline entry's subject and text (e.g. the email Sean actually sent), without adding
+    a new entry. None leaves that part as it is."""
+    t = con.execute("SELECT * FROM touches WHERE id = ?", (touch_id,)).fetchone()
+    if not t:
+        raise ValueError(f"No timeline entry {touch_id}")
+    con.execute("UPDATE touches SET subject = ?, detail = ? WHERE id = ?",
+                (t["subject"] if subject is None else subject, t["detail"] if body is None else body, touch_id))
+    con.commit()
+    return dict(con.execute("SELECT id, contact_id, at, kind, summary, subject, detail FROM touches WHERE id = ?", (touch_id,)).fetchone())
 
 
 # ---- change history ------------------------------------------------------------------------------

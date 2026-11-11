@@ -112,11 +112,27 @@ def update_contact(contact_id: int, company: str = "", person: str = "", role: s
 
 
 @mcp.tool()
-def log_touch(contact_id: int, kind: str, summary: str, at: str = "", reply_text: str = "", subject: str = "") -> dict:
+def log_touch(contact_id: int, kind: str, summary: str, at: str = "", reply_text: str = "", subject: str = "",
+              body: str = "") -> dict:
     """Record a call, email, bump, voicemail, reply, text, meeting or note. `at` is YYYY-MM-DD[THH:MM], default now.
+    For an email or bump Sean sent, pass the text he sent as body and its subject: the Conversations tab shows it.
     For a reply, pass everything they wrote as reply_text (and the email's subject): the person panel shows it at
     the top and the lists show a preview."""
-    return _slim(_with(db.log_touch, contact_id, kind, summary, at or None, "claude", reply_text, subject))
+    return _slim(_with(db.log_touch, contact_id, kind, summary, at or None, "claude", body or reply_text, subject))
+
+
+@mcp.tool()
+def find_touches(contact_id: int, kind: str = "", on: str = "") -> list[dict]:
+    """A person's timeline entries with ids, oldest first (text_len is how much text each holds). Filter by kind
+    (email, bump, reply, call...) and/or day `on` (YYYY-MM-DD). Use with set_touch_detail."""
+    return _with(db.find_touches, contact_id, kind or None, on or None)
+
+
+@mcp.tool()
+def set_touch_detail(touch_id: int, subject: str = "", body: str = "") -> dict:
+    """Fill in an existing timeline entry's subject and text, e.g. the email Sean actually sent, instead of
+    logging a duplicate. Empty leaves that part unchanged."""
+    return _with(db.set_touch_detail, touch_id, subject or None, body or None)
 
 
 @mcp.tool()
@@ -319,7 +335,7 @@ async def api_after_call(request):
 @_safe
 async def api_board(request):
     r = _with(db.overview, request.query_params["workspace"], request.query_params.get("q", ""))
-    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_reply", "last_said", "mobile", "notes")}
+    r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_reply", "last_said", "last_kind", "mobile", "notes")}
                      for c in r["contacts"]]
     return r
 
