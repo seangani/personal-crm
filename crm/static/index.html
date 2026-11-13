@@ -203,6 +203,7 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .tagn { color: var(--accent); font-weight: 600; margin-left: 4px; white-space: nowrap; }
 .place { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: var(--text-sm); }
 .place .i { width: 14px; height: 14px; }
+a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover { text-decoration: underline; }
 .progress { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: var(--text-sm); }
 .track { flex: 1; height: 6px; border-radius: 99px; background: var(--soft); overflow: clip; }
 .hday { font-size: var(--text-sm); font-weight: 600; color: var(--muted); margin: 16px 0 4px; }
@@ -490,6 +491,7 @@ const ICONS = {
   ai: '<path d="M12 3l1.9 5.1l5.1 1.9l-5.1 1.9l-1.9 5.1l-1.9 -5.1l-5.1 -1.9l5.1 -1.9z"/><path d="M18 15l.8 2.2l2.2 .8l-2.2 .8l-.8 2.2l-.8 -2.2l-2.2 -.8l2.2 -.8z"/>',
   building: '<path d="M4 21v-15a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v15"/><path d="M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 8h4M8 12h4M8 16h4"/>',
   alert: '<path d="M12 4l9 16h-18z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   pin: '<path d="M12 21s-6 -5.4 -6 -10.5a6 6 0 1 1 12 0c0 5.1 -6 10.5 -6 10.5z"/><circle cx="12" cy="10.5" r="2"/>',
 };
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ICONS.task}</svg>`;
@@ -852,7 +854,31 @@ const contactedText = c => { const n = daysSince(c.last_touch); return `<span cl
 const whoCell = c => `<div class="who" data-open="${c.id}">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>`;
 const others = c => state.board.contacts.filter(x => x.company === c.company && x.id !== c.id).length;
 const companyTag = c => `<button class="tag" type="button" data-company="${esc(c.company)}" title="Everyone at ${esc(c.company)}">${icon("building")}<span>${esc(c.company)}</span>${others(c) ? `<span class="tagn">+${others(c)} here</span>` : ""}</button>`;
-const placeOf = c => c.location ? `<span class="place">${icon("pin")}${esc(c.location)}</span>` : "";
+const AREA_STATE = (() => { const m = {}; "205 251 256 334 659 938".split(" ").forEach(c => m[c] = "AL"); "907".split(" ").forEach(c => m[c] = "AK"); "480 520 602 623 928".split(" ").forEach(c => m[c] = "AZ"); "479 501 870".split(" ").forEach(c => m[c] = "AR"); "209 213 279 310 323 341 350 408 415 424 442 510 530 559 562 619 626 628 650 657 661 669 707 714 747 760 805 818 820 831 840 858 909 916 925 949 951".split(" ").forEach(c => m[c] = "CA"); "303 719 720 970 983".split(" ").forEach(c => m[c] = "CO"); "203 475 860 959".split(" ").forEach(c => m[c] = "CT"); "302".split(" ").forEach(c => m[c] = "DE"); "202 771".split(" ").forEach(c => m[c] = "DC"); "239 305 321 324 352 386 407 448 561 645 656 689 727 728 754 772 786 813 850 863 904 941 954".split(" ").forEach(c => m[c] = "FL"); "229 404 470 478 678 706 762 770 912 943".split(" ").forEach(c => m[c] = "GA"); "808".split(" ").forEach(c => m[c] = "HI"); "208 986".split(" ").forEach(c => m[c] = "ID"); "217 224 309 312 331 447 464 618 630 708 730 773 779 815 847 861 872".split(" ").forEach(c => m[c] = "IL"); "219 260 317 463 574 765 812 930".split(" ").forEach(c => m[c] = "IN"); "319 515 563 641 712".split(" ").forEach(c => m[c] = "IA"); "316 620 785 913".split(" ").forEach(c => m[c] = "KS"); "270 364 502 606 859".split(" ").forEach(c => m[c] = "KY"); "225 318 337 504 985".split(" ").forEach(c => m[c] = "LA"); "207".split(" ").forEach(c => m[c] = "ME"); "227 240 301 410 443 667".split(" ").forEach(c => m[c] = "MD"); "339 351 413 508 617 774 781 857 978".split(" ").forEach(c => m[c] = "MA"); "231 248 269 313 517 586 616 679 734 810 906 947 989".split(" ").forEach(c => m[c] = "MI"); "218 320 507 612 651 763 952".split(" ").forEach(c => m[c] = "MN"); "228 601 662 769".split(" ").forEach(c => m[c] = "MS"); "235 314 417 557 573 636 660 816".split(" ").forEach(c => m[c] = "MO"); "406".split(" ").forEach(c => m[c] = "MT"); "308 402 531".split(" ").forEach(c => m[c] = "NE"); "702 725 775".split(" ").forEach(c => m[c] = "NV"); "603".split(" ").forEach(c => m[c] = "NH"); "201 551 609 640 732 848 856 862 908 973".split(" ").forEach(c => m[c] = "NJ"); "505 575".split(" ").forEach(c => m[c] = "NM"); "212 315 329 332 347 363 516 518 585 607 624 631 646 680 716 718 838 845 914 917 929 934".split(" ").forEach(c => m[c] = "NY"); "252 336 472 704 743 828 910 919 980 984".split(" ").forEach(c => m[c] = "NC"); "701".split(" ").forEach(c => m[c] = "ND"); "216 220 234 283 326 330 380 419 436 440 513 567 614 740 937".split(" ").forEach(c => m[c] = "OH"); "405 539 572 580 918".split(" ").forEach(c => m[c] = "OK"); "458 503 541 971".split(" ").forEach(c => m[c] = "OR"); "215 223 267 272 412 445 484 570 582 610 717 724 814 835 878".split(" ").forEach(c => m[c] = "PA"); "401".split(" ").forEach(c => m[c] = "RI"); "803 821 839 843 854 864".split(" ").forEach(c => m[c] = "SC"); "605".split(" ").forEach(c => m[c] = "SD"); "423 615 629 731 865 901 931".split(" ").forEach(c => m[c] = "TN"); "210 214 254 281 325 346 361 409 430 432 469 512 682 713 726 737 806 817 830 832 903 915 936 940 945 956 972 979".split(" ").forEach(c => m[c] = "TX"); "385 435 801".split(" ").forEach(c => m[c] = "UT"); "802".split(" ").forEach(c => m[c] = "VT"); "276 434 540 571 703 757 804 826 948".split(" ").forEach(c => m[c] = "VA"); "206 253 360 425 509 564".split(" ").forEach(c => m[c] = "WA"); "304 681".split(" ").forEach(c => m[c] = "WV"); "262 274 353 414 534 608 715 920".split(" ").forEach(c => m[c] = "WI"); "307".split(" ").forEach(c => m[c] = "WY"); return m; })();
+const STATES = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "Washington, DC", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas",
+  KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island",
+  SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
+  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
+// no city saved: the state their phone's area code belongs to (a cell number can be from somewhere else, so it says so)
+const areaState = c => { const d = String(c.phone || c.mobile || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""); return d.length === 10 ? AREA_STATE[d.slice(0, 3)] : ""; };
+function placeText(c) {
+  if (c.location) return c.location;
+  const st = areaState(c);
+  return st ? `${STATES[st]} (by area code)` : "";
+}
+const placeOf = c => placeText(c) ? `<span class="place">${icon("pin")}${esc(placeText(c))}</span>` : "";
+// their website, or the domain of a work email when none is saved
+const FREE_MAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|aol|icloud|me|mac|comcast|verizon|att|sbcglobal|proton|protonmail|gmx)\./i;
+function siteOf(c) {
+  const w = (c.website || "").trim();
+  if (w) return /^https?:/i.test(w) ? w : "https://" + w;
+  const dom = (c.email || "").split("@")[1] || "";
+  return dom && !FREE_MAIL.test(dom) ? "https://" + dom : "";
+}
+const siteLink = c => siteOf(c) ? `<a class="place site" href="${esc(siteOf(c))}" target="_blank" rel="noopener">${icon("globe")}${esc(siteOf(c).replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, ""))}</a>` : "";
 
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
 function warmRow(c, extra = "", dim = false) {
@@ -947,8 +973,7 @@ function callSession(calls, plan) {
       <p class="muted">${ses.log.length ? `${ses.log.length} logged, ${warmN} warm. The warm ones are in the panel above with their next outreach.` : "New ones show up here on the day they're due."}</p></div>` : `
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
-      <div class="sub">${companyTag(c)}${placeOf(c)}</div>
-      ${p ? `<div class="sub"><span class="pill${/close/i.test(p.tag) ? " hot" : ""}">#${String(p.n).padStart(2, "0")}${p.tag ? ` ${esc(p.tag)}` : ""}</span></div>` : ""}
+      <div class="sub">${companyTag(c)}${placeOf(c)}${siteLink(c)}</div>
       <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due, true, c.current.weekend)}</div></div>
       ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
@@ -961,7 +986,7 @@ function callSession(calls, plan) {
         <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
     </div>`;
   const next = queue.slice(1, 6).map(x => `<li data-open="${x.id}">${aiMark(x)}<span class="nm"><b>${esc(x.person || x.company)}</b>${x.person ? `<span class="co">${esc(x.company)}</span>` : ""}</span>
-    <span class="date">${planOf(x) ? `B${planOf(x).block} #${String(planOf(x).n).padStart(2, "0")}${planOf(x).tag ? ` ${esc(planOf(x).tag)}` : ""}` : esc(x.location ? x.location.split(",")[0] : "")}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
+    <span class="date">${esc(placeText(x).replace(" (by area code)", ""))}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
   const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
     <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(CALL_LOG.find(y => y[0] === x.outcome)?.[1] || x.outcome)}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
     || `<li class="muted">Each call you log shows up here, with undo.</li>`;
