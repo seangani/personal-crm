@@ -265,6 +265,8 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .track i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 200ms ease; }
 .session { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .session > div { min-width: 0; }
+.blockhd { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0 0 12px; font-size: var(--text-sm); }
+.morecalls { margin: 12px 0 0; }
 .now { border: 2px solid var(--accent); border-radius: 12px; background: var(--panel); padding: 20px; }
 .now h3 { font-size: var(--text-xl); font-weight: 650; display: flex; gap: 8px; align-items: center; margin: 0; }
 .now .nmlink, .log-list .nmlink { font-size: inherit; color: var(--ink); font-weight: inherit; text-align: left; }
@@ -918,15 +920,28 @@ function loadSession() {
   return state.session;
 }
 function saveSession() { try { localStorage.setItem(sessionKey(), JSON.stringify({ log: state.session.log, skipped: state.session.skipped })); } catch (e) {} }
-function callSession(calls) {
+// "Fri call, Block 2 (12-3 PM ET) #04: Close" -> block 2, window "12-3 PM ET", number 4, tag "Close"
+const PLAN_RE = /call, Block (\d+)\s*(?:\(([^)]*)\))?[^#]*#(\d+)(?::\s*(.*))?/i;
+function planOf(c) {
+  const m = c?.current?.type === "call" && (c.current.label || "").match(PLAN_RE);
+  return m ? { block: Number(m[1]), window: m[2] || "", n: Number(m[3]), tag: (m[4] || "").trim() } : null;
+}
+function callSession(calls, plan) {
   const ses = loadSession(), skipped = new Set(ses.skipped);
   const queue = [...calls.filter(c => !skipped.has(c.id)), ...calls.filter(c => skipped.has(c.id))];
   const c = queue[0], total = calls.length + ses.log.length, warmN = ses.log.filter(x => WARM_OUT.has(x.outcome)).length;
-  const now = !c ? `<div class="now"><h3>${icon("done")}${ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
+  const p = planOf(c);
+  const blockHead = p ? (() => {
+    const left = calls.filter(x => planOf(x)?.block === p.block).length, done = ses.log.filter(x => x.block === p.block).length;
+    return `<div class="blockhd"><b>Block ${p.block}${p.window ? `, ${esc(p.window)}` : ""}</b><span class="muted">${done} of ${left + done} logged</span></div>`;
+  })() : "";
+  const others = plan && plan.others ? `<p class="morecalls"><button class="link" type="button" data-allcalls>${state.allCalls ? "Hide" : "Show"} the ${plan.others} other overdue call${plan.others === 1 ? "" : "s"}</button></p>` : "";
+  const now = !c ? `<div class="now"><h3>${icon("done")}${plan ? "That's every call in today's plan" : ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
       <p class="muted">${ses.log.length ? `${ses.log.length} logged, ${warmN} warm. The warm ones are in the panel above with their next outreach.` : "New ones show up here on the day they're due."}</p></div>` : `
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
       <div class="sub">${companyTag(c)}${placeOf(c)}</div>
+      ${p ? `<div class="sub"><span class="pill${/close/i.test(p.tag) ? " hot" : ""}">#${String(p.n).padStart(2, "0")}${p.tag ? ` ${esc(p.tag)}` : ""}</span></div>` : ""}
       <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due, true, c.current.weekend)}</div></div>
       ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
@@ -938,13 +953,13 @@ function callSession(calls) {
         <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
     </div>`;
   const next = queue.slice(1, 6).map(x => `<li data-open="${x.id}">${aiMark(x)}<span class="nm"><b>${esc(x.person || x.company)}</b>${x.person ? `<span class="co">${esc(x.company)}</span>` : ""}</span>
-    <span class="date">${esc(x.location ? x.location.split(",")[0] : "")}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
+    <span class="date">${planOf(x) ? `B${planOf(x).block} #${String(planOf(x).n).padStart(2, "0")}${planOf(x).tag ? ` ${esc(planOf(x).tag)}` : ""}` : esc(x.location ? x.location.split(",")[0] : "")}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
   const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
     <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(CALL_LOG.find(y => y[0] === x.outcome)?.[1] || x.outcome)}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
     || `<li class="muted">Each call you log shows up here, with undo.</li>`;
   return `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
       <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>
-    <div class="session">${now}<div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
+    ${blockHead}<div class="session"><div>${now}${others}</div><div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
 }
 const WARM_OUT = new Set(["interested", "call_back", "talked", "maybe"]);
 const phoneOf = c => c.phone || c.mobile;
@@ -958,7 +973,7 @@ async function logSessionCall() {
   try {
     const r = await api(`/api/steps/${step}/done`, { method: "POST", body: { outcome, note } });
     const ses = loadSession();
-    ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0 });
+    ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0, block: planOf(c)?.block || 0 });
     ses.skipped = ses.skipped.filter(id => id !== cid);
     saveSession(); state.pick = ""; state.pickNote = "";
     toast(r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
@@ -992,7 +1007,14 @@ function renderOverview() {
   const dueNow = c => !done(c) && c.current?.due && c.current.due <= t;
   // calls and emails are the cold outreach; warm people live in the warm panel with their next outreach
   const cold = c => dueNow(c) && !st[c.stage]?.hot;
-  const calls = byDue(list.filter(c => cold(c) && c.current.type === "call"));
+  // a call plan for today (steps titled like "Fri call, Block 1 (9 AM-12 ET) #04: Close") replaces the overdue pile,
+  // warm people included, in block then number order; the rest stay one click away
+  const coldCalls = byDue(list.filter(c => cold(c) && c.current.type === "call"));
+  const plan = list.filter(c => !done(c) && c.current?.due === t && planOf(c))
+    .sort((a, b) => planOf(a).block - planOf(b).block || planOf(a).n - planOf(b).n);
+  const planDay = plan.length > 0 || loadSession().log.some(x => x.block);
+  const planIds = new Set(plan.map(c => c.id)), rest = coldCalls.filter(c => !planIds.has(c.id));
+  const calls = planDay ? [...plan, ...(state.allCalls ? rest : [])] : coldCalls;
   const emails = byDue(list.filter(c => cold(c) && c.current.type === "email"));
   const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type)));
   const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
@@ -1004,7 +1026,7 @@ function renderOverview() {
   const sat = weekendOf(t), sun = new Date(new Date(sat + "T12:00").getTime() + 864e5).toLocaleDateString("en-CA");
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
-  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><div class="grow"></div>${wkNote}</div>${callSession(calls)}</div>`;
+  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><div class="grow"></div>${wkNote}</div>${callSession(calls, planDay ? { others: rest.length } : null)}</div>`;
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
     ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
       <div class="rows">${shownEmails.map(row).join("")}</div>
@@ -1517,6 +1539,7 @@ document.addEventListener("click", async e => {
   if (undo) return undoSessionCall(Number(undo.dataset.undo));
   const co = e.target.closest("[data-company]");
   if (co) { $("#q").value = co.dataset.company; state.view = "all"; state.f = noFilters(); savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return load(); }
+  if (e.target.closest("[data-allcalls]")) { state.allCalls = !state.allCalls; return render(); }
   if (e.target.closest("[data-allemails]")) { state.allEmails = true; return render(); }
   const go = e.target.closest("[data-stagego]");
   if (go) { state.f = { ...noFilters(), stage: go.dataset.stagego }; state.view = "all"; savePrefs(); return render(); }
