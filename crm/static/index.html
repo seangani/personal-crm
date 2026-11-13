@@ -266,7 +266,9 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .session { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .session > div { min-width: 0; }
 .blockhd { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0 0 12px; font-size: var(--text-sm); }
-.morecalls { margin: 12px 0 0; }
+.morecalls { margin: 12px 0 0; } .seeconvo { margin: 12px 0 0; }
+.dconvo .tlist { max-height: 480px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0; }
+.dconvo .msg { max-width: 92%; }
 .now { border: 2px solid var(--accent); border-radius: 12px; background: var(--panel); padding: 20px; }
 .now h3 { font-size: var(--text-xl); font-weight: 650; display: flex; gap: 8px; align-items: center; margin: 0; }
 .now .nmlink, .log-list .nmlink { font-size: inherit; color: var(--ink); font-weight: inherit; text-align: left; }
@@ -674,6 +676,7 @@ function render() {
 const CONVO_STAGES = new Set(["Not now"]);
 const SEND_KINDS = new Set(["email", "bump"]), EVENT_ICON = { call: "call", voicemail: "call", text: "text", linkedin: "linkedin", meeting: "meeting", note: "task" };
 const NOT_REPLY = /^(bounced|auto-reply|out of (the )?office)/i;
+state.convoOpen = new Set();  // which emails are opened up in full
 function convoPeople() {
   const info = stageInfo();
   return state.board.contacts.filter(c => info[c.stage]?.kind !== "closed" &&
@@ -719,7 +722,6 @@ function pinnedStep(c) {
       <button class="btn sm${quick ? "" : " primary"}" type="button" data-email="${c.id}" data-sid="${s.id}">${s.type === "call" ? "Log the call" : "Open or edit"}</button></div></div>`;
 }
 async function renderConvo() {
-  if (!state.convoOpen) state.convoOpen = new Set();
   const people = convoPeople();
   if (!people.some(c => c.id === state.convo)) state.convo = people[0]?.id || null;
   const list = people.map(convoRow).join("");
@@ -945,6 +947,7 @@ function callSession(calls, plan) {
       <div class="sub">${c.role ? `<span>${esc(c.role)}</span>` : ""}${stagePill(c)}${stuckTag(c)}${dots(c)}<span>Last contact ${contactedText(c)}</span>${duePill(c.current.due, true, c.current.weekend)}</div></div>
       ${phoneOf(c) ? `<a class="big" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a>` : `<p class="muted">No number saved. Skip for now and add one in their panel.</p>`}
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
+      ${c.last_touch ? `<p class="seeconvo"><button class="link" type="button" data-convofor="${c.id}">See the emails you sent and what they wrote back</button></p>` : ""}
       <div class="lbl" id="whl">What happened?</div>
       <div class="chips" role="group" aria-labelledby="whl">${CALL_LOG.map(([v, t]) =>
         `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}" type="button" data-pick="${v}" aria-pressed="${state.pick === v}">${t}</button>`).join("")}</div>
@@ -1301,6 +1304,8 @@ async function openContact(id) {
     ${held ? `<span class="muted">No stuck warning until ${fmt(c.hold_until)}</span>` : ""}
     <span class="${warm && (n == null || n >= 7) ? "cold" : "muted"}">${contacted}</span></div>`;
   const recent = c.touches.slice(0, 2), reply = c.touches.find(isReply);
+  // the whole back-and-forth, oldest first, each email openable in full: context before a call
+  const talk = [...c.touches].reverse().filter(t => t.kind !== "stage");
   const closedNames = ws.stages.filter(s => s.kind === "closed").map(s => s.name), dead = closedNames.includes(c.stage);
   const lastStage = c.touches.find(t => t.kind === "stage");
   const killed = dead && /Killed from profile/.test(lastStage?.summary || "");
@@ -1323,6 +1328,8 @@ async function openContact(id) {
       <p class="pre">${esc(replyText(reply))}</p></div>` : ""}
     ${killed ? `<div class="killrow"><span class="pill dead">Killed</span><span class="muted">Every planned step was skipped.</span><button class="link" id="unkill" type="button">Undo kill</button></div>`
       : dead ? "" : `<div class="killrow" id="killrow"><button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
+    ${talk.length ? `<details class="fold dconvo" id="dconvo" open><summary>Emails, replies and calls (${talk.length})</summary>
+      <div class="tlist">${talk.map(convoItem).join("")}</div></details>` : ""}
     ${recent.filter(t => t !== reply).length ? `<ul class="timeline recent">${recent.filter(t => t !== reply).map(touchItem).join("")}</ul>` : ""}
     <div id="details">${detailsView(c, shownPhone)}</div>
     <h2>Steps</h2>
@@ -1515,7 +1522,13 @@ document.addEventListener("click", async e => {
   const cv = e.target.closest("[data-convo]");
   if (cv) { state.convo = Number(cv.dataset.convo); state.convoOpen = new Set(); window.scrollTo(0, 0); return renderConvo(); }
   const cx = e.target.closest("[data-cexp]");
-  if (cx) { const n = Number(cx.dataset.cexp); state.convoOpen.has(n) ? state.convoOpen.delete(n) : state.convoOpen.add(n); return renderConvo(); }
+  if (cx) {  // open or close one email in place (Conversations tab and the person panel)
+    const n = Number(cx.dataset.cexp), open = !state.convoOpen.has(n), mb = cx.previousElementSibling;
+    open ? state.convoOpen.add(n) : state.convoOpen.delete(n);
+    mb?.classList.toggle("clamp", !open); cx.textContent = open ? "Show less" : "Show all"; return;
+  }
+  const cf = e.target.closest("[data-convofor]");
+  if (cf) { await openContact(cf.dataset.convofor); const f = $("#dconvo"); if (f) { f.open = true; f.scrollIntoView({ block: "start" }); } return; }
   const cd = e.target.closest("[data-cdone]");
   if (cd) { cd.disabled = true; await api(`/api/steps/${cd.dataset.cdone}/done`, { method: "POST", body: {} }); toast("Done"); return load(); }
   const lf = e.target.closest("[data-logfor]");
