@@ -106,7 +106,7 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .kpi { min-width: 0; }
 .kpi b { display: block; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .kpi span { color: var(--muted); font-size: var(--text-sm); }
-.kpi.warm.has b { color: var(--hot); } .kpi.paid.has b { color: var(--ok); }
+.kpi.warm.has b, .kpi.hotn.has b { color: var(--hot); } .kpi.paid.has b { color: var(--ok); }
 .funnel { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); border-top: 1px solid var(--line); overflow-x: auto; }
 .fstage { border: 0; border-left: 1px solid var(--line); background: transparent; padding: 12px 20px; cursor: pointer; text-align: left; }
 .fstage:first-child { border-left: 0; }
@@ -264,6 +264,21 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .orow .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .orow .co { margin-left: 8px; color: var(--muted); }
 .orow.queued b { font-weight: 500; }
 @media (max-width: 560px) { .odays { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* analytics: the headline numbers reuse the summary panel; the funnel is bars against Contacted */
+.kpi small { display: block; color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
+.afun { display: grid; gap: 8px; padding: 16px 20px; }
+.afrow { display: grid; grid-template-columns: 140px minmax(0, 1fr) 56px 180px; gap: 12px; align-items: center; font-size: var(--text-sm); }
+.afbar { height: 12px; background: var(--soft); border-radius: 4px; overflow: clip; }
+.afbar i { display: block; height: 100%; background: var(--accent); transform-origin: left; }
+.afrow.hotr .afbar i { background: var(--hot); } .afrow.paidr .afbar i { background: var(--ok); }
+.afrow b { text-align: right; font-variant-numeric: tabular-nums; }
+.afrow .muted { white-space: nowrap; }
+.wbar { display: inline-block; height: 8px; min-width: 2px; background: var(--accent-bg); border-radius: 2px; vertical-align: middle; margin-right: 8px; }
+.agrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px 32px; }
+.adef { margin-top: 24px; font-size: var(--text-sm); color: var(--muted); }
+.adef summary { cursor: pointer; color: var(--ink); }
+.adef ul { margin: 8px 0 0; padding-left: 20px; }
+@media (max-width: 640px) { .afrow { grid-template-columns: 96px minmax(0, 1fr) 40px; } .afrow .muted { grid-column: 2 / -1; } }
 .track i { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform 200ms ease; }
 .session { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .session > div { min-width: 0; }
@@ -454,6 +469,7 @@ textarea.short { min-height: 72px; }
     <button data-v="convo">Conversations</button>
     <button data-v="strategies">Strategies</button>
     <button data-v="outreach" hidden>Outreach today</button>
+    <button data-v="analytics">Analytics</button>
     <button data-v="history">History</button>
   </nav>
   <div class="grow"></div>
@@ -673,7 +689,7 @@ function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
   if (!state.board) return;
   cleanFilters();
-  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory, convo: renderConvo })[state.view]();
+  ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory, convo: renderConvo, analytics: renderAnalytics })[state.view]();
 }
 
 // ---- conversations: each warm lead's whole back-and-forth as one thread ----------------------------------
@@ -840,6 +856,78 @@ async function renderOutreach(o) {
       <span class="muted">${o.bumps_waiting ?? 0} ${o.bumps_waiting === 1 ? "person is" : "people are"} still owed a bump</span></div>
       <div class="odays">${days}</div><p class="muted note">Bumps expected each weekday, ${o.per_day || 50} a day at most. When these hit zero, the bump backlog is used up.</p></div>` : ""}
     ${people || (["weekend", "waiting", "nothing_due"].includes(o.state) ? "" : `<div class="empty">No list for today.</div>`)}`;
+}
+
+// ---- analytics: how the outreach is doing, worked out live by the server from every logged touch ---------
+const pct = r => r == null ? "n/a" : `${r}%`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+async function renderAnalytics(a) {
+  if (!a) {
+    if (!state.analytics || state.analyticsWs !== state.ws) $("#main").innerHTML = `<div class="empty">Adding up the outreach...</div>`;
+    try { a = await api(`/api/analytics?workspace=${state.ws}`); }
+    catch (e) { if (state.view === "analytics") $("#main").innerHTML = `<div class="empty">Couldn't load the numbers. Try again in a minute.</div>`; return; }
+    const key = JSON.stringify(a);
+    if (state.view !== "analytics" || (key === state.analyticsKey && state.analyticsWs === state.ws && $("#main .afun"))) return;
+    state.analytics = a; state.analyticsKey = key; state.analyticsWs = state.ws;
+  }
+  const e = a.emails, r = a.response, k = a.calls;
+  const kpi = (n, label, sub, cls = "") => `<div class="kpi ${cls}"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const kpis = [
+    kpi(a.contacted, "Contacted", "people emailed or called"),
+    kpi(e.total, "Emails sent", `${e.first} first emails, ${e.bumps} bumps, ${e.yours} your replies`),
+    kpi(pct(r.rate), "Response rate", `${plural(r.n, "person", "people")} replied (${plural(r.replies, "reply", "replies")}) of ${r.base} emailed`),
+    kpi(pct(k.rate), "Calls connected", `${k.connected} of ${k.attempts} calls to ${k.people} people, ${plural(k.voicemails, "voicemail", "voicemails")}`),
+    kpi(a.first_convo.n, "1st conversation", `${pct(a.first_convo.rate)} of contacted`),
+    kpi(a.second_convo.n, "2nd conversation", `${pct(a.second_convo.rate)} of 1st conversations`),
+    kpi(a.warm.n, "Warm now", `${pct(a.warm.rate)} of contacted`, `hotn${a.warm.n ? " has" : ""}`),
+    kpi(a.meetings.n, "Meetings", `${pct(a.meetings.rate)} of contacted`),
+    kpi(a.clients.n, "Active clients", `${pct(a.clients.rate)} of contacted`, `paid${a.clients.n ? " has" : ""}`),
+    kpi(a.said_no.n, "Said no", `${pct(a.said_no.rate)} of contacted, ${a.bounced} bounced`),
+  ].join("");
+  const top = a.funnel[0].n || 1, cls = { Warm: "hotr", Meeting: "hotr", "Active client": "paidr" };
+  const funnel = a.funnel.map(f => `<div class="afrow ${cls[f.name] || ""}"><span>${esc(f.name)}</span>
+    <span class="afbar" aria-hidden="true"><i style="transform: scaleX(${Math.max(f.n / top, f.n ? 0.004 : 0)})"></i></span>
+    <b>${f.n}</b><span class="muted">${f.of ? `${pct(f.rate)} of ${esc(f.of.toLowerCase())}` : ""}</span></div>`).join("");
+  const wmax = Math.max(1, ...a.weeks.map(w => w.first));
+  const weeks = [...a.weeks].reverse().map(w => `<tr><td>Week of ${fmt(w.week)}</td>
+    <td class="num"><span class="wbar" style="width: ${Math.round(48 * w.first / wmax)}px" aria-hidden="true"></span>${w.first}</td>
+    <td class="num">${w.bumps}</td><td class="num">${w.calls}</td><td class="num">${w.replies}</td></tr>`).join("");
+  const subjects = a.subjects.map(x => `<tr><td>${esc(x.subject)}</td><td class="num">${x.people}</td><td class="num">${x.replied}</td>
+    <td class="num">${pct(x.rate)}</td><td class="num">${x.warm}</td></tr>`).join("");
+  const ch = a.channel, chRow = (name, g) => `<tr><td>${name}</td><td class="num">${g.people}</td><td class="num">${g.replied}</td>
+    <td class="num">${pct(g.reply_rate)}</td><td class="num">${g.warm}</td><td class="num">${pct(g.warm_rate)}</td></tr>`;
+  const t = a.timing, tTotal = t.first_email + t.after_bump;
+  $("#main").innerHTML = `<div class="section"><div class="head"><h2>Analytics</h2><div class="grow"></div><span class="muted">Live from the CRM, as of ${fmt(a.as_of)}</span></div>
+    <div class="summary"><div class="kpis">${kpis}</div></div></div>
+    <div class="section"><div class="head"><h2>Funnel</h2></div><div class="summary"><div class="afun">${funnel}</div></div>
+      <p class="muted note">Bars are against everyone contacted. Warm comes from 1st conversations, since a warm lead doesn't always need a second one first.</p></div>
+    <div class="section agrid">
+      <div><div class="head"><h2>Weekly activity</h2></div>
+        <table class="stable"><thead><tr><th>Week</th><th class="num">First emails</th><th class="num">Bumps</th><th class="num">Calls</th><th class="num">Replies</th></tr></thead>
+        <tbody>${weeks || `<tr><td colspan="5" class="empty">Nothing logged yet.</td></tr>`}</tbody></table>
+        <p class="muted note">Weeks start Monday. Calls include voicemails; replies leave out bounces and out of office notes.</p></div>
+      <div><div class="head"><h2>When people reply</h2></div>
+        <div class="summary"><div class="kpis">
+          ${kpi(t.first_email, "To the first email", tTotal ? `${Math.round(100 * t.first_email / tTotal)}% of people who replied` : "")}
+          ${kpi(t.after_bump, "After a bump", tTotal ? `${Math.round(100 * t.after_bump / tTotal)}% of people who replied` : "")}
+          ${kpi(t.median_days == null ? "n/a" : plural(t.median_days, "day", "days"), "Typical wait", "median, first email to reply")}
+        </div></div>
+        <div class="head"><h2>Email only vs called</h2></div>
+        <table class="stable"><thead><tr><th>Who</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply %</th><th class="num">Warm</th><th class="num">Warm %</th></tr></thead>
+        <tbody>${chRow("Email only", ch.email_only)}${chRow("Emailed and called", ch.email_and_call)}${chRow("Called only", ch.call_only)}</tbody></table>
+        <p class="muted note">Emailed groups leave out bounced addresses.</p></div>
+    </div>
+    <div class="section"><div class="head"><h2>By first email subject</h2></div>
+      <table class="stable"><thead><tr><th>Subject</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply %</th><th class="num">Warm now</th></tr></thead>
+      <tbody>${subjects || `<tr><td colspan="5" class="empty">No first emails logged yet.</td></tr>`}</tbody></table>
+      <p class="muted note">People leaves out bounced addresses. Batches 1 to 4 were logged without a subject, so theirs comes from the bump in the same thread or the Outreach Runbook. Batch 3 was an A/B test whose split wasn't saved for everyone.</p>
+      <details class="adef"><summary>How these are counted</summary><ul>
+        <li>A real reply is any reply that isn't a bounce, an auto-reply or an out of office note.</li>
+        <li>A call connected when you talked to them: logged as Talked, or Called: Interested, Not Interested or Call Back. Ghosted and no answer didn't.</li>
+        <li>1st conversation: a real reply or a connected call. 2nd conversation: that happened again on a different day, a meeting included.</li>
+        <li>Warm: in a warm stage now (Call back, Replied, Interested and later). Meetings: in a meeting stage or later. Said no: Not interested or Do not contact.</li>
+        <li>Your replies are emails you wrote yourself in Outlook. Response rate is people who replied out of people emailed whose address didn't bounce.</li>
+      </ul></details></div>`;
 }
 
 // ---- overview: the numbers, warm leads, a calling session, then the rest of today -------------------

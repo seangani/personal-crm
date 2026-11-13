@@ -12,6 +12,7 @@ import json
 import re
 import os
 import sqlite3
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -1295,6 +1296,161 @@ def undo_actor(con, actor, since, until=None, workspace=None, preview=True, by="
         for item in todo:
             undo_change(con, first[item["contact_id"]]["id"], by)
     return {"people": todo, "skipped": skipped, "changes": sum(i["changes"] for i in todo), "done": not preview}
+
+
+# ---- analytics: how the outreach is doing, worked out live from the touches --------------------------------
+NOT_REAL_REPLY = re.compile(r"^(replied:\s*)?(bounced|auto-reply|out of (the )?office)", re.I)
+OOO_TEXT = re.compile(r"out of (the )?office|automatic reply", re.I)
+CONNECTED_CALL = re.compile(r"^(talked|called: (interested|not interested|call back)|call \d+/\d+: rejected)", re.I)
+GATEKEEPER_CALL = re.compile(r"gatekeeper|assistant|front desk", re.I)
+BUMP_NOTE = re.compile(r"^(bump \d+ sent|daily bumps .*bump sent|vip bump)", re.I)
+YOUR_EMAIL = "Sent from Outlook"
+# Terms batches 1 to 4 were logged without a subject; these are the ones the Outreach Runbook says they used.
+# Batch 3 was an A/B test whose split wasn't saved, so it only gets a subject when the person's bump shows it.
+TERMS_BATCH_SUBJECT = {"1": "Quick question about {company}", "2": "Quick question about {company}",
+                       "3": "Batch 3 A/B test (subject not saved)", "4": "Quick question on contracts",
+                       "6": "Student research on contracts"}
+
+
+def _subject_of(first, bump, slug):
+    clean = lambda s: re.sub(r"^((re|fw|fwd):\s*)+", "", s.strip(), flags=re.I)
+    sub, summ = first
+    if sub:
+        s = clean(sub)
+    elif (m := re.search(r"email sent: (.+)$", summ)):
+        s = clean(m.group(1))
+    elif bump and (bump[0] or re.search(r"sent: (.+)$", bump[1])):
+        s = clean(bump[0] or re.search(r"sent: (.+)$", bump[1]).group(1))
+    elif slug == "terms" and (m := re.match(r"batch (\w+)", summ, re.I)) and m.group(1) in TERMS_BATCH_SUBJECT:
+        s = TERMS_BATCH_SUBJECT[m.group(1)]
+    else:
+        return "Subject not saved"
+    # "Quick question about Kyro Studio" and the like are one subject with the company filled in
+    return "Quick question about {company}" if re.match(r"quick question about (?!contracts)", s, re.I) else s
+
+
+def analytics(con, workspace):
+    """The outreach numbers for one workspace: headline rates, the funnel, weekly activity, results by email
+    subject, when people reply, and email-only vs called. People are counted once; emails and calls are counted
+    each time."""
+    ws = _ws(con, workspace)
+    stages = json.loads(ws["stages"])
+    info = {s["name"]: s for s in stages}
+    alias = {a: s["name"] for s in stages for a in s.get("aliases", [])}
+    people = {r["id"]: dict(r) | {"stage": alias.get(r["stage"], r["stage"])} for r in
+              con.execute("SELECT id, company, stage FROM contacts WHERE workspace_id = ?", (ws["id"],))}
+    touches = con.execute("SELECT t.contact_id AS cid, substr(t.at, 1, 10) AS day, t.kind, t.summary, t.subject, t.detail "
+                          "FROM touches t JOIN contacts c ON c.id = t.contact_id WHERE c.workspace_id = ? "
+                          "ORDER BY t.at, t.id", (ws["id"],)).fetchall()
+    first, first_bump, bump_days, real_reply = {}, {}, set(), {}
+    sent, calls = defaultdict(list), defaultdict(list)  # per person: [(day, kind)] for emails, [(day, connected)] for calls
+    emails = {"first": 0, "bumps": 0, "yours": 0}
+    talk_days, bounced = defaultdict(set), set()
+    weeks = defaultdict(lambda: {"first": 0, "bumps": 0, "calls": 0, "replies": 0})
+    week = lambda d: (date.fromisoformat(d) - timedelta(days=date.fromisoformat(d).weekday())).isoformat()
+    calls_n = {"attempts": 0, "connected": 0, "voicemails": 0, "gatekeeper": 0}
+    for t in touches:
+        cid, day, kind, summ = t["cid"], t["day"], t["kind"], t["summary"] or ""
+        if kind == "bump":
+            bump_days.add((cid, day))
+    for t in touches:
+        cid, day, kind, summ = t["cid"], t["day"], t["kind"], t["summary"] or ""
+        if kind == "email" and summ.startswith(YOUR_EMAIL):
+            emails["yours"] += 1
+            sent[cid].append(day)
+        elif kind == "email":
+            emails["first"] += 1
+            weeks[week(day)]["first"] += 1
+            sent[cid].append(day)
+            first.setdefault(cid, (day, t["subject"] or "", summ))
+        elif kind == "bump" or (kind == "note" and BUMP_NOTE.match(summ) and (cid, day) not in bump_days):
+            emails["bumps"] += 1
+            weeks[week(day)]["bumps"] += 1
+            sent[cid].append(day)
+            first_bump.setdefault(cid, (day, t["subject"] or "", summ))
+        elif kind in ("call", "voicemail"):
+            ok = kind == "call" and bool(CONNECTED_CALL.match(summ))
+            calls_n["attempts"] += 1
+            calls_n["voicemails"] += kind == "voicemail"
+            calls_n["connected"] += ok
+            calls_n["gatekeeper"] += kind == "call" and not ok and bool(GATEKEEPER_CALL.search(summ))
+            weeks[week(day)]["calls"] += 1
+            calls[cid].append(ok)
+            if ok:
+                talk_days[cid].add(day)
+        elif kind == "reply":
+            if summ.lower().startswith(("bounced", "replied: bounced")):
+                bounced.add(cid)
+            elif not NOT_REAL_REPLY.match(summ) and not OOO_TEXT.search(t["detail"] or "") and not OOO_TEXT.search(summ):
+                real_reply.setdefault(cid, []).append(day)
+                talk_days[cid].add(day)
+                weeks[week(day)]["replies"] += 1
+        elif kind == "bounce":
+            bounced.add(cid)
+        elif kind == "meeting":
+            talk_days[cid].add(day)
+    bounced |= {cid for cid, p in people.items() if p["stage"] == "Bounced"}
+
+    hot = {c for c, p in people.items() if info.get(p["stage"], {}).get("hot") or info.get(p["stage"], {}).get("kind") == "won"}
+    meet = {c for c, p in people.items() if any(info.get(p["stage"], {}).get(k) for k in ("meeting", "client"))
+            or info.get(p["stage"], {}).get("kind") == "won"}
+    client = {c for c, p in people.items() if info.get(p["stage"], {}).get("client")}
+    said_no = {c for c, p in people.items() if info.get(p["stage"], {}).get("kind") == "closed" and p["stage"] != "Bounced"}
+    contacted = set(sent) | set(calls)
+    emailed = set(sent) - bounced
+    replied = set(real_reply)
+    connected = {c for c, v in calls.items() if any(v)}
+    convo1 = (replied | connected) & contacted
+    convo2 = {c for c in convo1 if len(talk_days[c]) >= 2}
+    rate = lambda n, d: round(100 * n / d, 1) if d else None
+    stat = lambda s, base: {"n": len(s), "rate": rate(len(s), len(base))}
+
+    # each step's rate is against the step it grows out of; Warm comes from 1st conversations, not only 2nd ones
+    steps = [("Contacted", contacted, None), ("Delivered", contacted - bounced, "Contacted"),
+             ("1st conversation", convo1, "Delivered"), ("2nd conversation", convo2, "1st conversation"),
+             ("Warm", hot & contacted, "1st conversation"), ("Meeting", meet & contacted, "Warm"),
+             ("Active client", client & contacted, "Meeting")]
+    size = {n: len(s) for n, s, _ in steps}
+    funnel = [{"name": n, "n": len(s), "of": base, "rate": rate(len(s), size[base]) if base else None} for n, s, base in steps]
+
+    by_subject = defaultdict(set)
+    for cid, (day, sub, summ) in first.items():
+        by_subject[_subject_of((sub, summ), first_bump.get(cid, (None, "", ""))[1:], ws["slug"])].add(cid)
+    subjects = sorted(({"subject": s, "people": len(ids - bounced), "replied": len(ids & replied),
+                        "rate": rate(len(ids & replied), len(ids - bounced)), "warm": len(ids & hot)}
+                       for s, ids in by_subject.items()), key=lambda r: -r["people"])
+
+    timing = {"first_email": 0, "after_bump": 0, "days": []}
+    for cid in replied & set(first):
+        r = min(real_reply[cid])
+        b = first_bump.get(cid, (None,))[0]
+        timing["after_bump" if b and r > b else "first_email"] += 1
+        timing["days"].append((date.fromisoformat(r) - date.fromisoformat(first[cid][0])).days)
+    d = sorted(x for x in timing.pop("days") if x >= 0)
+    timing["median_days"] = (d[len(d) // 2] if len(d) % 2 else (d[len(d) // 2 - 1] + d[len(d) // 2]) / 2) if d else None
+
+    def group(ids):
+        return {"people": len(ids), "replied": len(ids & replied), "reply_rate": rate(len(ids & replied), len(ids)),
+                "warm": len(ids & hot), "warm_rate": rate(len(ids & hot), len(ids))}
+    channel = {"email_only": group(emailed - set(calls)), "email_and_call": group(emailed & set(calls)),
+               "call_only": group(set(calls) - set(sent))}
+
+    return {
+        "as_of": date.today().isoformat(),
+        "contacted": len(contacted),
+        "emails": emails | {"total": sum(emails.values())},
+        "response": {"n": len(replied & emailed), "replies": sum(len(v) for c, v in real_reply.items()),
+                     "base": len(emailed), "rate": rate(len(replied & emailed), len(emailed))},
+        "calls": calls_n | {"people": len(calls), "rate": rate(calls_n["connected"], calls_n["attempts"])},
+        "first_convo": stat(convo1, contacted),
+        "second_convo": stat(convo2, convo1),
+        "warm": stat(hot & contacted, contacted), "meetings": stat(meet & contacted, contacted),
+        "clients": stat(client & contacted, contacted), "said_no": stat(said_no & contacted, contacted),
+        "bounced": len(bounced & contacted),
+        "funnel": funnel,
+        "weeks": [{"week": w} | v for w, v in sorted(weeks.items())],
+        "subjects": subjects, "timing": timing, "channel": channel,
+    }
 
 
 # record these (assigned here, after they're defined, so calls inside this module are recorded too)

@@ -136,6 +136,14 @@ def set_touch_detail(touch_id: int, subject: str = "", body: str = "") -> dict:
 
 
 @mcp.tool()
+def outreach_analytics(workspace: str) -> dict:
+    """How a workspace's outreach is doing, live from the CRM: people contacted, emails sent (first emails, bumps,
+    Sean's own replies), response rate, call connect rate, 1st and 2nd conversations, warm, meetings, clients,
+    the funnel, weekly activity, results by email subject, reply timing and email-only vs called."""
+    return _with(db.analytics, workspace)
+
+
+@mcp.tool()
 def recent_changes(workspace: str = "", actor: str = "", since: str = "", contact_id: int = 0, limit: int = 100) -> list[dict]:
     """The change history, newest first: who changed which person and what changed. actor is web (Sean on the
     page), claude, task (scripts), inbox or sender; since is YYYY-MM-DD."""
@@ -347,6 +355,12 @@ async def api_board(request):
     r["contacts"] = [_slim(c) | {k: c[k] for k in ("updated", "progress", "current", "last_touch", "last_update", "last_reply", "last_said", "last_kind", "mobile", "notes", "website")}
                      for c in r["contacts"]]
     return r
+
+
+@mcp.custom_route("/api/analytics", methods=["GET"])
+@_safe
+async def api_analytics(request):
+    return _with(db.analytics, request.query_params["workspace"])
 
 
 # Today's automatic Terms email send. The outreach chat's send job writes this file (every 20 s while sending,
