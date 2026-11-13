@@ -668,6 +668,9 @@ function row(c) {
     <div class="stg">${stagePill(c)}${stuckTag(c)}</div>${dots(c)}<div class="nx">${nextText(c)}</div>
     <div class="due">${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div></div>`;
 }
+// call plan steps first (block, then #NN, the order Calls today uses), then everyone else by due date
+const byPlan = list => { const p = list.filter(c => planOf(c)), rest = list.filter(c => !planOf(c));
+  return [...p.sort((a, b) => planOf(a).block - planOf(b).block || planOf(a).n - planOf(b).n), ...byDue(rest)]; };
 const byDue = list => [...list].sort((a, b) => (a.current?.due || "9") < (b.current?.due || "9") ? -1 : 1);
 
 let lastBoard = "";
@@ -1021,7 +1024,7 @@ function warmPanel(list, all) {
   const groups = [
     { key: "hot", name: "Super hot", hint: "They said they're interested: Interested or further along, or Priority FOCUS or HOT. Chase them constantly. Focus first.", list: sets.hot, row: hotRow },
     { key: "upd", name: "Needs updates", hint: "Everyone past the cold stages, the person you haven't updated longest at the top. Log anything and they drop to the bottom.", list: sets.upd, row: hotRow },
-    { key: "call", name: "Call today", hint: "Warm people with a call due today or earlier.", list: byDue(list.filter(callNow)) },
+    { key: "call", name: "Call today", hint: "Warm people with a call due today or earlier.", list: byPlan(list.filter(callNow)) },
     { key: "follow", name: "Follow up", hint: "Every other warm lead, by when you next reach out. Anyone with nothing scheduled is at the top.",
       list: byNext(list.filter(c => !callNow(c) && !stageInfo()[c.stage]?.client)) },
     { key: "clients", name: "Clients", hint: "Active clients, kept out of the chase lists. Next step soonest first.", list: sets.clients, row: hotRow },
