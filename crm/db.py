@@ -204,7 +204,7 @@ def stale_days(c, kinds, today=None):
     """Days someone has sat in their stage when that's over STALE_DAYS, else 0. Finished stages (won, closed)
     never go stale, and neither does anyone on hold (hold_until in the future)."""
     today = today or date.today().isoformat()
-    if kinds.get(c["stage"]) in ("won", "closed") or (c.get("hold_until") or "") > today:
+    if kinds.get(c["stage"]) in ("won", "closed", "client") or (c.get("hold_until") or "") > today:
         return 0
     since = c.get("stage_changed") or (c.get("created") or "")[:10]
     if not since:
@@ -215,7 +215,8 @@ def stale_days(c, kinds, today=None):
 
 def _kinds(con, slug):
     row = con.execute("SELECT stages FROM workspaces WHERE slug = ?", (slug,)).fetchone()
-    return {s["name"]: s["kind"] for s in json.loads(row["stages"])} if row else {}
+    # a client stage ("client": true) is still active, but sitting in it is the point, so it never goes stale
+    return {s["name"]: "client" if s.get("client") else s["kind"] for s in json.loads(row["stages"])} if row else {}
 
 
 def _workday(d):
@@ -252,7 +253,8 @@ def save_workspace(con, slug, name, stages, description="", fields=None):
     """Create a workspace or replace its pipeline. Contacts on a removed stage keep their stage name.
     A stage may carry "hot": true to mark warm leads (a move there pauses the planned strategy steps),
     "meeting": true to count it as a booked meeting, "paid": true for stages that earn money, and
-    "aliases": [old names] so a renamed stage still answers to its old name."""
+    "aliases": [old names] so a renamed stage still answers to its old name, and "client": true for the stage
+    the Active client button moves people to."""
     for s in stages:
         if not s.get("name") or s.get("kind", "active") not in KINDS:
             raise ValueError(f"Bad stage {s}: needs a name and kind in {sorted(KINDS)}")
@@ -817,6 +819,19 @@ def kill(con, contact_id, stage=None, source="web"):
     return move_stage(con, contact_id, stage, "Killed from profile", None, source)
 
 
+def mark_client(con, contact_id, source="web"):
+    """Mark someone an active client: move them to the workspace's client stage ("client": true), keeping their
+    planned steps. undo_step(con, -contact_id) puts them back where they were."""
+    c = get_contact(con, contact_id, with_touches=False)
+    st = next((x["name"] for x in get_workspace(con, c["workspace"])["stages"] if x.get("client")), None)
+    if not st:
+        raise ValueError("This workspace has no client stage")
+    if c["stage"] == st:
+        raise ValueError(f"{c['person'] or c['company']} is already {st}")
+    _save_undo(con, {"contact_id": contact_id, "id": -contact_id})
+    return move_stage(con, contact_id, st, "Marked active client from profile", None, source)
+
+
 def undo_step(con, step_id):
     """Put back a step done on the page: its status, the contact's stage and steps, and drop the timeline
     entries it added. Only the most recent thing done for that contact can be undone."""
@@ -1280,5 +1295,5 @@ def undo_actor(con, actor, since, until=None, workspace=None, preview=True, by="
 
 # record these (assigned here, after they're defined, so calls inside this module are recorded too)
 for _name in ("update_contact", "mark_ai", "move_stage", "log_touch", "log_call", "add_step", "edit_step", "delete_step",
-              "skip_step", "complete_step", "apply_strategy", "set_next_step", "finish_step_of_type", "kill", "undo_step"):
+              "skip_step", "complete_step", "apply_strategy", "set_next_step", "finish_step_of_type", "kill", "mark_client", "undo_step"):
     globals()[_name] = _recorded(globals()[_name])

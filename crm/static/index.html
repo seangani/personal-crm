@@ -1310,6 +1310,7 @@ async function openContact(id) {
   const closedNames = ws.stages.filter(s => s.kind === "closed").map(s => s.name), dead = closedNames.includes(c.stage);
   const lastStage = c.touches.find(t => t.kind === "stage");
   const killed = dead && /Killed from profile/.test(lastStage?.summary || "");
+  const clientStage = ws.stages.find(s => s.client)?.name;
 
   const stepCard = (s, isCur) => {
     const open = state.open.has(s.id);
@@ -1328,7 +1329,9 @@ async function openContact(id) {
     ${reply ? `<div class="reply"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
       <p class="pre">${esc(replyText(reply))}</p></div>` : ""}
     ${killed ? `<div class="killrow"><span class="pill dead">Killed</span><span class="muted">Every planned step was skipped.</span><button class="link" id="unkill" type="button">Undo kill</button></div>`
-      : dead ? "" : `<div class="killrow" id="killrow"><button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
+      : dead ? "" : `<div class="killrow" id="killrow">${clientStage && c.stage !== clientStage ? `<button class="btn sm" id="mkclient" type="button">Make active client</button>` : ""}
+        ${c.stage === clientStage ? `<span class="pill paid">Active client</span>${/Marked active client/.test(lastStage?.summary || "") ? `<button class="link" id="unclient" type="button">Undo</button>` : ""}` : ""}
+        <button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
     ${talk.length ? `<details class="fold dconvo" id="dconvo" open><summary>Emails, replies and calls (${talk.length})</summary>
       <div class="tlist">${talk.map(convoItem).join("")}</div></details>` : ""}
     ${recent.filter(t => t !== reply).length ? `<ul class="timeline recent">${recent.filter(t => t !== reply).map(touchItem).join("")}</ul>` : ""}
@@ -1390,6 +1393,10 @@ async function openContact(id) {
       await api(`/api/contacts/${id}/kill`, { method: "POST", body: { stage } }); toast(`Moved to ${stage}`); refresh(id);
     };
   };
+  const mc = $("#mkclient");
+  if (mc) mc.onclick = async () => { mc.disabled = true; await api(`/api/contacts/${id}/client`, { method: "POST" }); toast(`${c.person || c.company} is now an active client`); refresh(id); };
+  const uc = $("#unclient");
+  if (uc) uc.onclick = async () => { await api(`/api/contacts/${id}/client`, { method: "POST", body: { undo: true } }); toast("Back where they were"); refresh(id); };
   const ub = $("#unkill");
   if (ub) ub.onclick = async () => { await api(`/api/contacts/${id}/kill`, { method: "POST", body: { undo: true } }); toast("Back where they were"); refresh(id); };
   $("#hold").onchange = async e => {

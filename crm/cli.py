@@ -10,6 +10,7 @@
     python -m crm.cli log-mail --email x@y.com --kind reply|auto|bounce --summary "..." [--at YYYY-MM-DD] [--subject "..."] [--body "..."]
     python -m crm.cli kill <id> [--stage "Do not contact"]   # mark dead: closed stage, planned steps skipped
     python -m crm.cli mark-ai --ids 12,40 --state seen|batch|clear [--note "Batch 9, Sat Oct 31"]
+    python -m crm.cli client <id> [--undo]       # mark an active client (planned steps stay)
     python -m crm.cli hold <id> YYYY-MM-DD|none   # no "stuck" warning before that date
     python -m crm.cli touches (<id> | --email x@y.com) [--kind email] [--on YYYY-MM-DD]   # timeline entries with ids
     python -m crm.cli set-touch-detail (<touch_id> | --email x@y.com --kind email --on YYYY-MM-DD) [--subject "..."] [--body "..."|--body-file f]
@@ -171,6 +172,7 @@ def main():
     s = sub.add_parser("log-mail"); s.add_argument("--email", required=True); s.add_argument("--kind", required=True)
     s.add_argument("--summary", default=""); s.add_argument("--at"); s.add_argument("--subject", default=""); s.add_argument("--body", default="")
     s = sub.add_parser("kill"); s.add_argument("id", type=int); s.add_argument("--stage")
+    s = sub.add_parser("client"); s.add_argument("id", type=int); s.add_argument("--undo", action="store_true")
     s = sub.add_parser("mark-ai"); s.add_argument("--ids", required=True, help="contact ids, comma separated")
     s.add_argument("--state", required=True, choices=["seen", "batch", "clear"]); s.add_argument("--note", default="")
     s = sub.add_parser("hold"); s.add_argument("id", type=int); s.add_argument("until", help="YYYY-MM-DD, or none to clear")
@@ -200,6 +202,8 @@ def main():
         elif a.cmd == "mark-ai":
             state = "" if a.state == "clear" else a.state
             out = [db.mark_ai(con, int(i), state, a.note)["id"] for i in a.ids.split(",") if i.strip()]
+        elif a.cmd == "client":
+            out = db.undo_step(con, -a.id) if a.undo else db.mark_client(con, a.id, "task")
         elif a.cmd == "kill":
             out = db.kill(con, a.id, a.stage, "task")
         elif a.cmd == "hold":

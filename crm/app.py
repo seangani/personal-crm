@@ -166,6 +166,15 @@ def kill(contact_id: int, stage: str = "", undo: bool = False) -> dict:
 
 
 @mcp.tool()
+def mark_client(contact_id: int, undo: bool = False) -> dict:
+    """Mark someone an active client (Terms: the Active client stage). Their planned steps stay. undo=True
+    puts back how they stood before."""
+    if undo:
+        return _slim(_with(db.undo_step, -contact_id))
+    return _slim(_with(db.mark_client, contact_id, "claude"))
+
+
+@mcp.tool()
 def move_stage(contact_id: int, stage: str, reason: str = "", at: str = "") -> dict:
     """Move a contact to another pipeline stage, with the reason. Closing stages clear the next step."""
     return _slim(_with(db.move_stage, contact_id, stage, reason, at or None, "claude"))
@@ -442,6 +451,14 @@ async def api_kill(request):
     b = await _body(request)
     cid = request.path_params["cid"]
     return _with(db.undo_step, -cid) if b.get("undo") else _with(db.kill, cid, b.get("stage") or None, "web")
+
+
+@mcp.custom_route("/api/contacts/{cid:int}/client", methods=["POST"])
+@_safe
+async def api_client(request):
+    b = await _body(request)
+    cid = request.path_params["cid"]
+    return _with(db.undo_step, -cid) if b.get("undo") else _with(db.mark_client, cid, "web")
 
 
 @mcp.custom_route("/api/contacts/{cid:int}/call", methods=["POST"])
