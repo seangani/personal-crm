@@ -235,6 +235,7 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .msg .mb { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg .mb.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .msg .link { margin-top: 4px; }
+.msg .nofull { margin: 4px 0 0; color: var(--muted); font-size: var(--text-xs); }
 .ev { align-self: center; display: inline-flex; gap: 8px; align-items: baseline; max-width: min(640px, 92%); font-size: var(--text-sm); color: var(--ink); }
 .ev .i { width: 16px; height: 16px; color: var(--muted); align-self: center; flex: none; } .ev .muted { white-space: nowrap; }
 .sdiv { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: var(--text-xs); }
@@ -702,12 +703,12 @@ function convoItem(t) {
   };
   if (SEND_KINDS.has(t.kind)) {
     return `<div class="msg out"><div class="mh"><span>You, ${t.kind === "bump" ? "bump" : "email"}</span><span>${when}</span></div>
-      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${body ? text(body) : `<p class="mb">${esc(t.summary)}</p>`}</div>`;
+      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${body ? text(body) : `<p class="mb">${esc(t.summary)}</p><p class="nofull">Full email not saved yet</p>`}</div>`;
   }
   if (t.kind === "reply" && !NOT_REPLY.test(t.summary || "")) {
     const txt = replyText(t);
     return `<div class="msg in"><div class="mh"><span>They replied</span><span>${when}</span></div>
-      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${text(txt || t.summary)}</div>`;
+      ${t.subject ? `<div class="ms">${esc(t.subject)}</div>` : ""}${text(txt || t.summary)}${body ? "" : `<p class="nofull">Short version, their full reply isn't saved yet</p>`}</div>`;
   }
   return `<div class="ev">${icon(EVENT_ICON[t.kind] || (t.kind === "reply" ? "alert" : "task"))}<span><b>${esc(kindLabel(t.kind))}</b> ${esc(t.summary)}</span><span class="muted">${when}</span></div>`;
 }
