@@ -111,6 +111,7 @@ CALL_OUTCOMES = {
     "rejected": ("call", "Talked, not interested", "@closed"),  # @closed = the workspace's first closed stage
     "talked": ("call", "Talked", None),
     "maybe": ("call", "Talked, lukewarm, wants an email", None),  # also adds the after-call email, due today
+    "loom": ("call", "Talked, sending a Loom video", None),  # also adds a "Record and send a Loom" to do, due today
 }
 AFTER_CALL_DEFAULT = {"subject": "Following up on our call", "body": "Hi {first_name},\n\nGreat talking with you today.\n\nBest,\nSean"}
 
@@ -771,6 +772,9 @@ def complete_step(con, step_id, outcome="", note="", source="web", at=None):
         log_touch(con, cid, kind, summary + extra, at, source)
         _call_stage(con, cid, outcome, source)
         email = _after_call_email(con, cid) if outcome == "maybe" else None
+        if outcome == "loom":
+            _insert_step(con, cid, "task", "Record and send a Loom", date.today().isoformat(), "",
+                         "Record a short Loom walking them through Terms, then email them the link." + (f" From the call: {note}" if note else ""))
     elif s["type"] == "close":
         ws = get_workspace(con, get_contact(con, cid, False)["workspace"])
         closed = [x["name"] for x in ws["stages"] if x["kind"] == "closed"]

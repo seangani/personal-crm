@@ -642,8 +642,10 @@ function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(
 // Sean's rule: nobody sits in one stage over 4 days. The server works it out (won, closed and held people never get it)
 const stuckTag = (c, long) => c.stale_days ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
   ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
+// the outcome buttons; Make Loom took Call back later's place (Sean, 11/13), which still names older log entries
 const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
-  ["call_back", "Call back later"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"]];
+  ["loom", "Make Loom"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"]];
+const outcomeName = o => (CALL_LOG.find(y => y[0] === o) || { call_back: [o, "Call back later"] }[o])?.[1] || o;
 function row(c) {
   return `<div class="ov-row" data-id="${c.id}">
     <div class="who">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>
@@ -988,13 +990,13 @@ function callSession(calls, plan) {
   const next = queue.slice(1, 6).map(x => `<li data-open="${x.id}">${aiMark(x)}<span class="nm"><b>${esc(x.person || x.company)}</b>${x.person ? `<span class="co">${esc(x.company)}</span>` : ""}</span>
     <span class="date">${esc(placeText(x).replace(" (by area code)", ""))}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
   const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
-    <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(CALL_LOG.find(y => y[0] === x.outcome)?.[1] || x.outcome)}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
+    <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(outcomeName(x.outcome))}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
     || `<li class="muted">Each call you log shows up here, with undo.</li>`;
   return `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
       <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>
     ${blockHead}<div class="session"><div>${now}${others}</div><div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
 }
-const WARM_OUT = new Set(["interested", "call_back", "talked", "maybe"]);
+const WARM_OUT = new Set(["interested", "call_back", "loom", "talked", "maybe"]);
 const phoneOf = c => c.phone || c.mobile;
 
 async function logSessionCall() {
@@ -1009,7 +1011,7 @@ async function logSessionCall() {
     ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0, block: planOf(c)?.block || 0 });
     ses.skipped = ses.skipped.filter(id => id !== cid);
     saveSession(); state.pick = ""; state.pickNote = "";
-    toast(r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
+    toast(outcome === "loom" ? "Call logged. Record and send a Loom is on today's to do list" : r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
     await load();
     if (r.after_call_step) openEmail(cid, r.after_call_step);
   } catch (e) { $("#logNext").disabled = false; }
