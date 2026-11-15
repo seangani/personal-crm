@@ -275,6 +275,8 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .afrow .muted { white-space: nowrap; }
 .wbar { display: inline-block; height: 8px; min-width: 2px; background: var(--accent-bg); border-radius: 2px; vertical-align: middle; margin-right: 8px; }
 .agrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px 32px; }
+.summary + .summary { margin-top: 16px; }
+.mhint { margin: 0; padding: 0 20px 16px; }
 .adef { margin-top: 24px; font-size: var(--text-sm); color: var(--muted); }
 .adef summary { cursor: pointer; color: var(--ink); }
 .adef ul { margin: 8px 0 0; padding-left: 20px; }
@@ -887,6 +889,15 @@ async function renderAnalytics(a) {
     kpi(a.clients.n, "Active clients", `${pct(a.clients.rate)} of contacted`, `paid${a.clients.n ? " has" : ""}`),
     kpi(a.said_no.n, "Said no", `${pct(a.said_no.rate)} of contacted, ${a.bounced} bounced`),
   ].join("");
+  const m = a.money, cyc = m.cycle;
+  const dealList = cyc.deals.map(d => `${d.person} (${d.company}): ${plural(d.days, "day", "days")}`).join(", ");
+  const cycSub = !cyc.n ? "no closed deals yet" : cyc.n < 3 ? `${plural(cyc.n, "deal", "deals")} so far: ${esc(dealList)}` : `median of ${cyc.n} deals`;
+  const money = [
+    kpi(pct(m.positive.rate), "Positive reply rate", `${plural(m.positive.n, "person", "people")} replied and turned warm, vs ${pct(m.positive.raw_rate)} who replied at all`, "hotn has"),
+    kpi(pct(m.meeting.rate), "Meeting rate", `${m.meeting.n} of ${m.meeting.base} good conversations reached a meeting`),
+    kpi(pct(m.close.rate), "Close rate", `${m.close.n} of ${plural(m.close.base, "meeting", "meetings")} became a client`, `paid${m.close.n ? " has" : ""}`),
+    `<div class="kpi" title="${esc(dealList)}"><b>${cyc.n ? plural(cyc.median_days, "day", "days") : "n/a"}</b><span>Sales cycle</span><small>${cycSub}</small></div>`,
+  ].join("");
   const top = a.funnel[0].n || 1, cls = { Warm: "hotr", Meeting: "hotr", "Active client": "paidr" };
   const funnel = a.funnel.map(f => `<div class="afrow ${cls[f.name] || ""}"><span>${esc(f.name)}</span>
     <span class="afbar" aria-hidden="true"><i style="transform: scaleX(${Math.max(f.n / top, f.n ? 0.004 : 0)})"></i></span>
@@ -896,11 +907,14 @@ async function renderAnalytics(a) {
     <td class="num"><span class="wbar" style="width: ${Math.round(48 * w.first / wmax)}px" aria-hidden="true"></span>${w.first}</td>
     <td class="num">${w.bumps}</td><td class="num">${w.calls}</td><td class="num">${w.replies}</td></tr>`).join("");
   const subjects = a.subjects.map(x => `<tr><td>${esc(x.subject)}</td><td class="num">${x.people}</td><td class="num">${x.replied}</td>
-    <td class="num">${pct(x.rate)}</td><td class="num">${x.warm}</td></tr>`).join("");
+    <td class="num">${pct(x.rate)}</td><td class="num">${x.positive}</td><td class="num hide-sm">${pct(x.positive_rate)}</td>
+    <td class="num">${x.meetings}</td><td class="num">${x.closed}</td><td class="num hide-sm">${x.warm}</td></tr>`).join("");
   const ch = a.channel, chRow = (name, g) => `<tr><td>${name}</td><td class="num">${g.people}</td><td class="num">${g.replied}</td>
     <td class="num">${pct(g.reply_rate)}</td><td class="num">${g.warm}</td><td class="num">${pct(g.warm_rate)}</td></tr>`;
   const t = a.timing, tTotal = t.first_email + t.after_bump;
   $("#main").innerHTML = `<div class="section"><div class="head"><h2>Analytics</h2><div class="grow"></div><span class="muted">Live from the CRM, as of ${fmt(a.as_of)}</span></div>
+    <div class="summary"><div class="kpis">${money}</div>
+      <p class="muted note mhint">Positive reply rate: replies that turned into a warm lead. Meeting rate: good conversations (positive replies, or calls that ended interested, call back, lukewarm or Loom) that reached a meeting stage. Close rate: meetings that became a client. Sales cycle: days from your first email or call to becoming a client.</p></div>
     <div class="summary"><div class="kpis">${kpis}</div></div></div>
     <div class="section"><div class="head"><h2>Funnel</h2></div><div class="summary"><div class="afun">${funnel}</div></div>
       <p class="muted note">Bars are against everyone contacted. Warm comes from 1st conversations, since a warm lead doesn't always need a second one first.</p></div>
@@ -921,14 +935,17 @@ async function renderAnalytics(a) {
         <p class="muted note">Emailed groups leave out bounced addresses.</p></div>
     </div>
     <div class="section"><div class="head"><h2>By first email subject</h2></div>
-      <table class="stable"><thead><tr><th>Subject</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply %</th><th class="num">Warm now</th></tr></thead>
-      <tbody>${subjects || `<tr><td colspan="5" class="empty">No first emails logged yet.</td></tr>`}</tbody></table>
+      <table class="stable"><thead><tr><th>Subject</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply %</th><th class="num">Positive</th><th class="num hide-sm">Positive %</th>
+      <th class="num">Meetings</th><th class="num">Clients</th><th class="num hide-sm">Warm now</th></tr></thead>
+      <tbody>${subjects || `<tr><td colspan="9" class="empty">No first emails logged yet.</td></tr>`}</tbody></table>
       <p class="muted note">People leaves out bounced addresses. Batches 1 to 4 were logged without a subject, so theirs comes from the bump in the same thread or the Outreach Runbook. Batch 3 was an A/B test whose split wasn't saved for everyone.</p>
       <details class="adef"><summary>How these are counted</summary><ul>
         <li>A real reply is any reply that isn't a bounce, an auto-reply or an out of office note.</li>
         <li>A call connected when you talked to them: logged as Talked, or Called: Interested, Not Interested or Call Back. Ghosted and no answer didn't.</li>
         <li>1st conversation: a real reply or a connected call. 2nd conversation: that happened again on a different day, a meeting included.</li>
         <li>Warm: in a warm stage now (Call back, Replied, Interested and later). Meetings: in a meeting stage or later. Said no: Not interested or Do not contact.</li>
+        <li>Positive reply: a real reply from someone who is, or once was, in Call back, Interested or a later warm stage. Replied alone doesn't count, since every reply lands there; someone who went from Replied to Not now or Not interested isn't positive.</li>
+        <li>Meetings and clients count anyone who ever reached that stage, even if they moved on later.</li>
         <li>Your replies are emails you wrote yourself in Outlook. Response rate is people who replied out of people emailed whose address didn't bounce.</li>
       </ul></details></div>`;
 }

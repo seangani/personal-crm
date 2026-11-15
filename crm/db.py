@@ -1302,6 +1302,8 @@ def undo_actor(con, actor, since, until=None, workspace=None, preview=True, by="
 NOT_REAL_REPLY = re.compile(r"^(replied:\s*)?(bounced|auto-reply|out of (the )?office)", re.I)
 OOO_TEXT = re.compile(r"out of (the )?office|automatic reply", re.I)
 CONNECTED_CALL = re.compile(r"^(talked|called: (interested|not interested|call back)|call \d+/\d+: rejected)", re.I)
+# a call that ended well: they're interested, asked for a call back, want an email, or are getting a Loom
+POSITIVE_CALL = re.compile(r"^(talked, (interested|asked for a call back|lukewarm|sending a loom)|called: (interested|call back))", re.I)
 GATEKEEPER_CALL = re.compile(r"gatekeeper|assistant|front desk", re.I)
 BUMP_NOTE = re.compile(r"^(bump \d+ sent|daily bumps .*bump sent|vip bump)", re.I)
 YOUR_EMAIL = "Sent from Outlook"
@@ -1338,7 +1340,7 @@ def analytics(con, workspace):
     info = {s["name"]: s for s in stages}
     alias = {a: s["name"] for s in stages for a in s.get("aliases", [])}
     people = {r["id"]: dict(r) | {"stage": alias.get(r["stage"], r["stage"])} for r in
-              con.execute("SELECT id, company, stage FROM contacts WHERE workspace_id = ?", (ws["id"],))}
+              con.execute("SELECT id, company, person, stage FROM contacts WHERE workspace_id = ?", (ws["id"],))}
     touches = con.execute("SELECT t.contact_id AS cid, substr(t.at, 1, 10) AS day, t.kind, t.summary, t.subject, t.detail "
                           "FROM touches t JOIN contacts c ON c.id = t.contact_id WHERE c.workspace_id = ? "
                           "ORDER BY t.at, t.id", (ws["id"],)).fetchall()
@@ -1348,6 +1350,7 @@ def analytics(con, workspace):
     talk_days, bounced = defaultdict(set), set()
     weeks = defaultdict(lambda: {"first": 0, "bumps": 0, "calls": 0, "replies": 0})
     week = lambda d: (date.fromisoformat(d) - timedelta(days=date.fromisoformat(d).weekday())).isoformat()
+    moves, first_touch, pos_call = defaultdict(list), {}, set()  # stage moves [(day, stage)], first outreach day, calls that ended well
     calls_n = {"attempts": 0, "connected": 0, "voicemails": 0, "gatekeeper": 0}
     for t in touches:
         cid, day, kind, summ = t["cid"], t["day"], t["kind"], t["summary"] or ""
@@ -1389,6 +1392,13 @@ def analytics(con, workspace):
             bounced.add(cid)
         elif kind == "meeting":
             talk_days[cid].add(day)
+        elif kind == "stage" and "→" in summ:
+            to = summ.split("→", 1)[1].split(":", 1)[0].strip()
+            moves[cid].append((day, alias.get(to, to)))
+        if kind in ("email", "bump", "call", "voicemail") or (kind == "note" and BUMP_NOTE.match(summ)):
+            first_touch.setdefault(cid, day)
+        if kind == "call" and POSITIVE_CALL.match(summ):
+            pos_call.add(cid)
     bounced |= {cid for cid, p in people.items() if p["stage"] == "Bounced"}
 
     hot = {c for c, p in people.items() if info.get(p["stage"], {}).get("hot") or info.get(p["stage"], {}).get("kind") == "won"}
@@ -1405,6 +1415,33 @@ def analytics(con, workspace):
     rate = lambda n, d: round(100 * n / d, 1) if d else None
     stat = lambda s, base: {"n": len(s), "rate": rate(len(s), len(base))}
 
+    # money metrics: who was ever warm, ever in a meeting stage, ever a client (stage moves plus where they are now)
+    flag = lambda st, *keys: any(info.get(st, {}).get(k) for k in keys) or info.get(st, {}).get("kind") == "won"
+    ever = {c: [st for _, st in moves[c]] + [p["stage"]] for c, p in people.items()}
+    # Replied is set automatically when any reply lands, so on its own it doesn't make a reply positive
+    positive = {c for c in replied & emailed if flag(people[c]["stage"], "hot")
+                or any(flag(st, "hot") and st != "Replied" for st in ever[c])}
+    pos_convo = (positive | (pos_call & connected)) & contacted
+    meet_ever = {c for c in contacted if any(flag(st, "meeting", "client") for st in ever[c])}
+    won_ever = {c for c in contacted if any(flag(st, "client", "paid") and not info.get(st, {}).get("meeting") for st in ever[c])}
+    deals = []
+    for c in won_ever:
+        day = next((d for d, st in moves[c] if flag(st, "client", "paid") and not info.get(st, {}).get("meeting")), None)
+        if day and c in first_touch:
+            deals.append({"id": c, "person": people[c]["person"] or people[c]["company"], "company": people[c]["company"],
+                          "days": (date.fromisoformat(day) - date.fromisoformat(first_touch[c])).days, "on": day})
+    deals.sort(key=lambda x: x["days"])
+    dd = [x["days"] for x in deals]
+    money = {
+        "positive": {"n": len(positive), "base": len(emailed), "rate": rate(len(positive), len(emailed)),
+                     "raw_rate": rate(len(replied & emailed), len(emailed))},
+        "meeting": {"n": len(meet_ever), "base": len(pos_convo), "rate": rate(len(meet_ever), len(pos_convo)),
+                    "positive_calls": len(pos_call & connected & contacted)},
+        "close": {"n": len(won_ever), "base": len(meet_ever), "rate": rate(len(won_ever), len(meet_ever))},
+        "cycle": {"n": len(dd), "deals": deals,
+                  "median_days": (dd[len(dd) // 2] if len(dd) % 2 else (dd[len(dd) // 2 - 1] + dd[len(dd) // 2]) / 2) if dd else None},
+    }
+
     # each step's rate is against the step it grows out of; Warm comes from 1st conversations, not only 2nd ones
     steps = [("Contacted", contacted, None), ("Delivered", contacted - bounced, "Contacted"),
              ("1st conversation", convo1, "Delivered"), ("2nd conversation", convo2, "1st conversation"),
@@ -1417,7 +1454,9 @@ def analytics(con, workspace):
     for cid, (day, sub, summ) in first.items():
         by_subject[_subject_of((sub, summ), first_bump.get(cid, (None, "", ""))[1:], ws["slug"])].add(cid)
     subjects = sorted(({"subject": s, "people": len(ids - bounced), "replied": len(ids & replied),
-                        "rate": rate(len(ids & replied), len(ids - bounced)), "warm": len(ids & hot)}
+                        "rate": rate(len(ids & replied), len(ids - bounced)), "warm": len(ids & hot),
+                        "positive": len(ids & positive), "positive_rate": rate(len(ids & positive), len(ids - bounced)),
+                        "meetings": len(ids & meet_ever), "closed": len(ids & won_ever)}
                        for s, ids in by_subject.items()), key=lambda r: -r["people"])
 
     timing = {"first_email": 0, "after_bump": 0, "days": []}
@@ -1438,6 +1477,7 @@ def analytics(con, workspace):
     return {
         "as_of": date.today().isoformat(),
         "contacted": len(contacted),
+        "money": money,
         "emails": emails | {"total": sum(emails.values())},
         "response": {"n": len(replied & emailed), "replies": sum(len(v) for c, v in real_reply.items()),
                      "base": len(emailed), "rate": rate(len(replied & emailed), len(emailed))},
