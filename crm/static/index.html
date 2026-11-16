@@ -68,6 +68,8 @@ nav button { border: 0; background: transparent; padding: 4px 12px; min-height: 
 nav button:hover { color: var(--ink); }
 nav button.on { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
 .grow { flex: 1; }
+.viewpick { display: none; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); padding: 0 8px; min-width: 0; flex: 0 1 auto; }
+#qbtn { display: none; }
 input.search { flex: 0 1 280px; min-width: 140px; min-height: 36px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--panel);
   min-height: 36px; padding: 4px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: 500; text-decoration: none; color: var(--ink); }
@@ -147,13 +149,10 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .seq .counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .cold { color: var(--warn); font-weight: 600; }
 .filtered { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--ink); font-size: var(--text-sm); }
-.strip { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: baseline; padding: 4px 0 4px; }
-.strip div { display: flex; gap: 8px; align-items: baseline; }
-.strip b { font-size: var(--text-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
-.strip span { color: var(--muted); font-size: var(--text-sm); }
-.strip .stuckn { display: flex; gap: 8px; align-items: baseline; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.strip .stuckn:hover span { color: var(--ink); text-decoration: underline; } .strip .stuckn.has b { color: var(--warn); }
-.strip .hotn.has b { color: var(--hot); } .strip .paidn.has b { color: var(--ok); }
+.pulse { margin: 0 0 24px; color: var(--muted); font-size: var(--text-sm); }
+.pulse b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pulse .hotn.has b { color: var(--hot); } .pulse .paidn.has b { color: var(--ok); }
+.pulse .link { margin-left: 4px; }
 .ai { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ai); flex: none; }
 .ai .i { width: 14px; height: 14px; }
 .ai.batch { background: var(--ai-bg); }
@@ -435,9 +434,11 @@ textarea.short { min-height: 72px; }
 @media (max-width: 640px) {
   html, body { font-size: 16px; }
   header { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); gap: 8px; flex-wrap: wrap; } main { padding: 16px; }
-  header .grow { display: none; }
-  #add { order: 2; margin-left: auto; } nav { order: 3; width: 100%; } nav button { flex: 1; padding: 4px; }
-  input.search { order: 5; flex: 1 1 100%; }
+  /* one row on phones: workspace, view picker, search and add as icons; search opens a row below */
+  header { flex-wrap: wrap; } header .grow { display: none; } nav { display: none; } .viewpick { display: block; flex: 1 1 0; }
+  select.ws { flex: 0 1 auto; min-width: 0; max-width: 40%; text-overflow: ellipsis; }
+  #qbtn { display: inline-flex; } #add .addt { display: none; } #add, #qbtn { width: 44px; padding: 0; }
+  input.search { display: none; order: 5; flex: 1 1 100%; } header.searching input.search { display: block; }
   .dhead { padding-inline: 16px; } .dbody { padding-inline: 16px; }
   .x { width: 44px; height: 44px; }
   .chips { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .chip { min-height: 44px; }
@@ -474,9 +475,11 @@ textarea.short { min-height: 72px; }
     <button data-v="analytics">Analytics</button>
     <button data-v="history">History</button>
   </nav>
+  <select class="viewpick" id="viewpick" aria-label="View"></select>
   <div class="grow"></div>
+  <button class="btn iconbtn" id="qbtn" type="button" aria-label="Search" aria-expanded="false" aria-controls="q"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5 -3.5"/></svg></button>
   <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
-  <button class="btn primary" id="add">Add person</button>
+  <button class="btn" id="add" type="button" aria-label="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
 </header>
 <main id="main"><div class="skeleton" aria-label="Loading your pipeline"><i></i><i></i><i></i><i></i></div>
 <noscript><p class="empty">The CRM needs JavaScript turned on to show your pipeline.</p></noscript></main>
@@ -692,6 +695,8 @@ function render() {
   $('#tabs [data-v="outreach"]').hidden = !terms;
   if (!terms && state.view === "outreach") state.view = "overview";
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === state.view));
+  $("#viewpick").innerHTML = [...document.querySelectorAll("#tabs button")].filter(b => !b.hidden)
+    .map(b => `<option value="${b.dataset.v}"${b.dataset.v === state.view ? " selected" : ""}>${esc(b.textContent)}</option>`).join("");
   if (!state.board) return;
   cleanFilters();
   ({ overview: renderOverview, board: renderBoard, all: renderAll, strategies: renderStrategies, outreach: renderOutreach, history: renderHistory, convo: renderConvo, analytics: renderAnalytics })[state.view]();
@@ -1162,14 +1167,14 @@ function renderOverview() {
   const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type)));
   const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
 
-  const strip = `<div class="strip"><div class="hotn${has(warm.length)}"><b>${warm.length}</b><span>warm</span></div>
-    <div><b>${interested}</b><span>interested or further</span></div><div class="paidn${has(paid)}"><b>${paid}</b><span>at a paid stage</span></div>
-    <div><b>${dead}</b><span>dead</span></div><button class="stuckn${has(stuck)}" type="button" data-stuckgo title="See everyone stuck in one stage over 4 days"><b>${stuck}</b><span>stuck over 4 days</span></button><div><b>${calls.length}</b><span>calls due</span></div><div><b>${emails.length}</b><span>emails due</span></div></div>`;
+  const strip = `<p class="pulse"><span class="hotn${has(warm.length)}"><b>${warm.length}</b> warm</span>, <b>${interested}</b> interested or further,
+    <span class="paidn${has(paid)}"><b>${paid}</b> at a paid stage</span>, <b>${dead}</b> dead.
+    ${stuck ? `<button class="link" type="button" data-stuckgo>${stuck} stuck over 4 days</button>` : ""}</p>`;
   const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm, list)}</div>`;
   const sat = weekendOf(t), sun = new Date(new Date(sat + "T12:00").getTime() + 864e5).toLocaleDateString("en-CA");
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
-  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><div class="grow"></div>${wkNote}</div>${callSession(calls, planDay ? { others: rest.length } : null)}</div>`;
+  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><span class="n">${calls.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, planDay ? { others: rest.length } : null)}</div>`;
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
     ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
       <div class="rows">${shownEmails.map(row).join("")}</div>
@@ -1186,7 +1191,7 @@ function renderOverview() {
       }).join("")}</tbody></table></div>`;
   const sname = state.f.strategy === "none" ? "people with no strategy" : state.board.strategies.find(x => String(x.id) === state.f.strategy)?.name;
   const filteredNote = sname ? `<p class="filtered">Showing ${esc(sname)} only, so every number below counts ${list.length} of ${state.board.contacts.length} people.</p>` : "";
-  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + warmSec + callSec + emailSec + otherSec + strat;
+  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
 }
 
 function renderBoard() {
@@ -1707,7 +1712,12 @@ document.addEventListener("click", async e => {
   const el = !e.target.closest("select, input, textarea, button") && e.target.closest("[data-id]");
   if (el && !e.target.closest(".drawer")) return openContact(el.dataset.id);
   const tab = e.target.closest("#tabs button");
-  if (tab) { state.view = tab.dataset.v; state.stratOpen = null; try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
+  if (tab) return setView(tab.dataset.v);
+  if (e.target.closest("#qbtn")) {
+    const on = $("header").classList.toggle("searching"); $("#qbtn").setAttribute("aria-expanded", on);
+    if (on) $("#q").focus();
+    return;
+  }
   if (e.target.id === "retry") return load();
   if (e.target.id === "clearF") { state.f = noFilters(); savePrefs(); return render(); }
   const th = e.target.closest("th[data-sort]");
@@ -1765,6 +1775,8 @@ document.addEventListener("keydown", e => {
   }
 });
 $("#add").onclick = addForm;
+function setView(v) { state.view = v; state.stratOpen = null; try { localStorage.setItem("crm.view", v); } catch (e) {} render(); }
+$("#viewpick").onchange = e => setView(e.target.value);
 let timer; $("#q").oninput = () => { clearTimeout(timer); timer = setTimeout(load, 200); };
 $("#ws").onchange = e => { state.ws = e.target.value; try { localStorage.setItem("crm.ws", state.ws); } catch (e) {} loadPrefs(); load(); };
 // keep the page current when Claude changes things through MCP or the CLI: check on focus, when the tab comes back,
