@@ -365,6 +365,7 @@ th .arrow { color: var(--accent); }
 .col.closed .colhead h3 { color: var(--closed); }
 .card { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer; font-size: var(--text-sm); }
 .card:hover { border-color: var(--accent); }
+.card .date.late { font-weight: 500; }
 .card .top { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
 .card .who { font-weight: 600; }
 .card .step { margin-top: 4px; display: flex; gap: 4px; align-items: center; color: var(--muted); }
@@ -476,7 +477,7 @@ textarea.short { min-height: 72px; }
   .seq li { grid-template-columns: 56px minmax(0, 1fr); } .seq .counts { grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 16px; }
   .wrow { grid-template-columns: minmax(0, 1fr) auto; } .wnext { grid-column: 1 / -1; justify-self: stretch; } .nxo { display: flex; max-width: 100%; } .wmeta { padding-left: 0; }
   .points { max-height: none; overflow: visible; }
-  .session { grid-template-columns: minmax(0, 1fr); } .now { padding: 16px; } .tab { min-width: 108px; padding: 12px; } .tabpanel { padding: 4px 12px 12px; }
+  .session { grid-template-columns: minmax(0, 1fr); } .now { padding: 16px; } .tabs { flex-wrap: wrap; overflow-x: visible; } .tab { flex: 1 1 30%; min-width: 0; padding: 12px; } .tabpanel { padding: 4px 12px 12px; }
   .btn, input.callnote, .filters select, nav button, input.search, .drawer select.pick, .drawer input.pick, .box input, .stp input, .stp select, .btn.sm { min-height: 44px; }
   input, select, textarea { font-size: 16px; }
   .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 12px 16px; }
@@ -502,7 +503,7 @@ textarea.short { min-height: 72px; }
   <select class="viewpick" id="viewpick" aria-label="View"></select>
   <div class="grow"></div>
   <button class="btn iconbtn" id="qbtn" type="button" aria-label="Search" aria-expanded="false" aria-controls="q"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5 -3.5"/></svg></button>
-  <input class="search" id="q" placeholder="Search names, companies, emails, phones" type="search">
+  <input class="search" id="q" placeholder="Search names, companies, emails, phones" type="search" aria-keyshortcuts="/">
   <button class="btn" id="add" type="button" aria-label="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
 </header>
 <p class="offline" id="offline" role="status" hidden>Can’t reach the CRM right now, so what you see may be out of date. It reconnects on its own.</p>
@@ -1086,7 +1087,7 @@ function warmRow(c, extra = "", dim = false) {
   const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
   return `<div class="wrow${dim ? " held" : ""}" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
-    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${replyPeek(c)}${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
+    <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${replyPeek(c)}${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra || (phoneOf(c) ? `<span class="hacts"><a class="tel" href="tel:${esc(phoneOf(c))}">${icon("call")}${esc(phoneOf(c))}</a></span>` : "")}</div></div>`;
 }
 // Super hot: people who said they're interested (Interested and every stage after it, or Priority FOCUS or HOT).
 // Needs updates: everyone past the cold stages (Reached gatekeeper onward), stalest first. Never won or closed.
@@ -1838,7 +1839,7 @@ document.addEventListener("click", async e => {
   const go = e.target.closest("[data-stagego]");
   if (go) { state.f = { ...noFilters(), stage: go.dataset.stagego }; state.view = "all"; savePrefs(); return render(); }
   if (e.target.closest("[data-stuckgo]")) { state.f = { ...noFilters(), due: "stuck" }; state.view = "all"; savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
-  const el = !e.target.closest("select, input, textarea, button") && e.target.closest("[data-id]");
+  const el = !e.target.closest("select, input, textarea, button, a") && e.target.closest("[data-id]");
   if (el && !e.target.closest(".drawer")) return openContact(el.dataset.id);
   const tab = e.target.closest("#tabs button");
   if (tab) return setView(tab.dataset.v);
@@ -1902,6 +1903,9 @@ document.addEventListener("change", e => {
 });
 $("#scrim").onclick = closeDrawer;
 document.addEventListener("keydown", e => {
+  if (e.key === "/" && !e.metaKey && !e.ctrlKey && !typing() && !document.activeElement?.matches("input, select, textarea") && !$("#drawer").classList.contains("open")) {
+    e.preventDefault(); $("header").classList.add("searching"); $("#qbtn").setAttribute("aria-expanded", "true"); $("#q").focus(); $("#q").select(); return;
+  }
   if (e.key === "Escape") closeDrawer();
   if (e.key === "Enter" && e.target.id === "callNote") logSessionCall();
   const tabs = e.target.closest('[role="tablist"]');
