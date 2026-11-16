@@ -426,8 +426,8 @@ textarea.short { min-height: 72px; }
 .drawer select.pick, .drawer input.pick { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .drawer input.pick { color: var(--ink); color-scheme: light dark; }
 .drawer select.pick.auto { width: auto; }
-#today h3.sh { display: flex; gap: 8px; align-items: baseline; font-size: var(--text-md); font-weight: 600; margin: 20px 0 8px; }
-#today h3.sh:first-of-type { margin-top: 8px; } #today h3.sh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+#today .gh { display: flex; gap: 8px; align-items: baseline; margin: 20px 0 8px; } #today .gh:first-of-type { margin-top: 8px; }
+#today h3.sh { font-size: var(--text-md); font-weight: 600; margin: 0; } #today .gh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .drawer h3.sh { font-size: var(--text-md); font-weight: 600; margin: 24px 0 0; }
 .stp { border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; }
 .stp .h { display: flex; gap: 8px; align-items: center; width: 100%; padding: 8px 12px; min-height: 44px; border: 0; border-radius: 11px;
@@ -1299,7 +1299,7 @@ function renderOverview() {
   const callSec = `<div class="section" id="calls"><div class="head"><h2>${planDay ? "Today's plan" : "Calls today"}</h2><span class="n">${todays.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, { others: backlog.length, plan: planDay })}</div>`;
   // one list for everything else to reach today (critique 11/16): it replaced Due today, Emails to send, Other things due
   // and the Strategies table (that lives on the Strategies tab). The call sheet stays its own box
-  const group = (title, rows, extra = "") => rows.length ? `<h3 class="sh">${title}<span class="n">${rows.length}</span></h3>${extra}<div class="rows">${rows.map(row).join("")}</div>` : "";
+  const group = (title, rows, extra = "") => rows.length ? `<div class="gh"><h3 class="sh">${title}</h3><span class="n">${rows.length}</span></div>${extra}<div class="rows">${rows.map(row).join("")}</div>` : "";
   const reachN = dueToday.length + emails.length + other.length;
   const reachSec = `<div class="section" id="today"><div class="head"><h2>Reach today</h2><span class="n">${reachN}</span></div>
     ${reachN ? group("Due today", dueToday)
