@@ -357,8 +357,23 @@ tbody tr[data-id] { cursor: pointer; } tbody tr[data-id]:hover td { background: 
 th[data-sort] { cursor: pointer; user-select: none; }
 th[data-sort]:hover { color: var(--ink); }
 th .arrow { color: var(--accent); }
+.lane { margin: 8px 0 24px; }
+.lanehead { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+.lanehead h2 { margin: 0; font-size: var(--text-lg); } .lanehead .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+details.lane > summary { cursor: pointer; color: var(--muted); font-size: var(--text-sm); margin: 0 0 8px; }
 .board { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
-.col { flex: 0 0 248px; max-height: calc(100vh - 200px); overflow-y: auto; }
+.col { flex: 0 0 248px; max-height: 70vh; overflow-y: auto; border-radius: 8px; }
+.col.none { flex-basis: 132px; } .col.none .colhead h3 { color: var(--muted); font-weight: 500; }
+.col.drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.col .more-btn { width: 100%; }
+.card .cfoot { display: flex; align-items: center; gap: 8px; margin-top: 4px; } .card .cfoot:empty { display: none; }
+.card .mv { margin-left: auto; min-height: 28px; color: var(--muted); } .card .mv:hover { color: var(--accent); }
+.card select.mvsel { margin-left: auto; min-height: 28px; max-width: 160px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.card[draggable="true"] { cursor: grab; } .card.dragging { opacity: 0.4; }
+select.stagesel { min-height: 32px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-weight: 600; cursor: pointer; }
+select.stagesel:hover { border-color: var(--accent); }
+.bulk { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel); font-size: var(--text-sm); }
+td.sel, th.sel { width: 32px; padding-right: 0; } .selbox { display: inline-flex; padding: 4px; cursor: pointer; } .selbox input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .colhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 4px 0 8px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
 .colhead h3 { font-size: var(--text-sm); margin: 0; font-weight: 600; }
 .colhead .n { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
@@ -470,6 +485,8 @@ textarea.short { min-height: 72px; }
   .stp.cur:not(.call) .acts { position: sticky; bottom: 0; z-index: 1; background: var(--panel); margin: 12px -12px 0; padding: 8px 12px; border-top: 1px solid var(--line); }
   .stp .h, .stepedit summary, .drawer .sub .link { min-height: 44px; }
   table .hide-sm { display: none; }
+  .board { flex-direction: column; overflow-x: visible; gap: 8px; } .col { flex: none; width: 100%; max-height: none; } .col.none { display: none; }
+  .card .mv, .card select.mvsel { min-height: 44px; } .selbox { padding: 12px; }
   .grid2 { grid-template-columns: minmax(0, 1fr); }
   .ov-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who due" "nx dots"; gap: 4px 12px; padding: 12px 4px; }
   .ov-row .who { grid-area: who; } .ov-row .due { grid-area: due; } .ov-row .nx { grid-area: nx; } .ov-row .dots { grid-area: dots; justify-self: end; }
@@ -547,7 +564,7 @@ const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 da
 const noFilters = () => ({ stage: "", due: "", strategy: "", custom: {} });
 
 let state = { ws: null, view: "overview", board: null, workspaces: [], f: noFilters(), sort: { key: "updated", dir: -1 },
-  allEmails: false, warmTab: "close", pick: "", pickNote: "", session: null, stratOpen: null, open: new Set() };
+  allEmails: false, warmTab: "close", pick: "", pickNote: "", session: null, stratOpen: null, open: new Set(), sel: new Set(), colAll: new Set() };
 try { state.view = localStorage.getItem("crm.view") || "overview"; state.warmTab = localStorage.getItem("crm.warmTab") || "close"; } catch (e) {}
 if (state.view === "today") state.view = "overview";
 const curWs = () => state.workspaces.find(w => w.slug === state.ws);
@@ -1300,18 +1317,51 @@ function renderOverview() {
   $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + todaySec + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
 }
 
+// lanes so the board fits the data (critique 11/16): warm people first, cold outreach next, closed folded away
+const BOARD_CAP = 25;
+function boardCard(c) {
+  const name = c.person || c.company;
+  return `<div class="card" data-id="${c.id}" draggable="true">
+    <div class="top"><span class="who">${esc(name)}</span>${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div>
+    ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
+    ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}
+    <div class="cfoot">${dots(c)}${stuckTag(c)}<button class="link mv" data-move="${c.id}" type="button" aria-label="Move ${esc(name)} to another stage">Move</button></div>
+    ${c.last_reply ? `<div class="rq">“${esc(c.last_reply.text)}”</div>` : ""}</div>`;
+}
+function boardCol(s, list) {
+  const cs = list.filter(c => c.stage === s.name), all = state.colAll.has(s.name), shown = all ? cs : cs.slice(0, BOARD_CAP);
+  return `<div class="col${s.kind === "closed" ? " closed" : ""}${cs.length ? "" : " none"}" data-col="${esc(s.name)}">
+    <div class="colhead"><h3>${esc(s.name)}</h3><span class="n">${cs.length}</span></div>
+    ${shown.map(boardCard).join("")}
+    ${cs.length > shown.length ? `<button class="btn sm more-btn" data-colall="${esc(s.name)}" type="button">Show all ${cs.length}</button>` : ""}</div>`;
+}
 function renderBoard() {
   const list = filtered(true, false);
   if (noMatch(list)) { $("#main").innerHTML = filterBar({ stage: false }, 0) + noMatch(list); return; }
-  $("#main").innerHTML = filterBar({ stage: false }, list.length) + `<div class="board">${state.board.stages.map(s => {
-    const cs = list.filter(c => c.stage === s.name);
-    return `<div class="col ${s.kind === "closed" ? "closed" : ""}"><div class="colhead"><h3>${esc(s.name)}</h3><span class="n">${cs.length}</span></div>
-      ${cs.slice(0, 150).map(c => `<div class="card" data-id="${c.id}">
-        <div class="top"><span class="who">${esc(c.person || c.company)}</span>${c.current ? duePill(c.current.due, true, c.current.weekend) : ""}</div>
-        ${c.person ? `<div class="muted">${esc(c.company)}</div>` : ""}
-        ${c.current ? `<div class="step">${icon(c.current.type)}<span>${esc(c.current.label)}</span></div>` : ""}${dots(c)}${stuckTag(c)}${c.last_reply ? `<div class="rq">“${esc(c.last_reply.text)}”</div>` : ""}</div>`).join("")}
-      ${cs.length > 150 ? `<div class="empty">+${cs.length - 150} more, search to narrow</div>` : ""}</div>`;
-  }).join("")}</div>`;
+  const warm = s => s.hot || s.kind === "won";
+  const lanes = [["Warm", s => warm(s) && s.kind !== "closed"], ["In outreach", s => !warm(s) && s.kind !== "closed"], ["Closed", s => s.kind === "closed"]];
+  const html = lanes.map(([title, test]) => {
+    const stages = state.board.stages.filter(test), names = new Set(stages.map(s => s.name));
+    const n = list.filter(c => names.has(c.stage)).length;
+    if (!stages.length) return "";
+    const board = `<div class="board">${stages.map(s => boardCol(s, list)).join("")}</div>`;
+    return title === "Closed"
+      ? `<details class="lane"${state.closedOpen ? " open" : ""} id="closedLane"><summary>Closed (${n})</summary>${board}</details>`
+      : `<section class="lane"><div class="lanehead"><h2>${title}</h2><span class="n">${n}</span></div>${board}</section>`;
+  }).join("");
+  $("#main").innerHTML = filterBar({ stage: false }, list.length) + html;
+  const cl = $("#closedLane"); if (cl) cl.ontoggle = () => { state.closedOpen = cl.open; };
+}
+// Move on a card turns into a stage picker in place
+function openMovePicker(btn) {
+  const c = state.board.contacts.find(x => x.id === Number(btn.dataset.move)); if (!c) return;
+  const sel = document.createElement("select");
+  sel.className = "mvsel"; sel.setAttribute("aria-label", `Move ${c.person || c.company} to`);
+  sel.innerHTML = `<option value="" selected disabled>Move to</option>` + state.board.stages.filter(s => s.name !== c.stage).map(s => `<option>${esc(s.name)}</option>`).join("");
+  btn.replaceWith(sel); sel.focus();
+  try { sel.showPicker(); } catch (e) {}
+  sel.onchange = () => moveStages([c.id], sel.value);
+  sel.onblur = () => { if (!sel.value) sel.replaceWith(btn); };
 }
 
 function renderAll() {
@@ -1319,13 +1369,29 @@ function renderAll() {
   const fields = shownFields().map(f => f.name);
   const th = (key, label, cls = "") => `<th data-sort="${esc(key)}" class="${cls}">${esc(label)}${state.sort.key === key
     ? ` <span class="arrow">${state.sort.dir > 0 ? "↑" : "↓"}</span>` : ""}</th>`;
-  $("#main").innerHTML = filterBar({}, rows.length) + `<table><thead><tr>${th("person", "Person")}${th("company", "Company")}${th("stage", "Stage")}
+  const ids = new Set(rows.map(c => c.id));
+  state.sel.forEach(id => { if (!ids.has(id)) state.sel.delete(id); });  // only people you can see stay picked
+  const allOn = rows.length && rows.every(c => state.sel.has(c.id));
+  $("#main").innerHTML = filterBar({}, rows.length) + bulkBar() + `<table><thead><tr><th class="sel"><label class="selbox"><input type="checkbox" id="selAll"${allOn ? " checked" : ""} aria-label="Pick everyone shown"></label></th>${th("person", "Person")}${th("company", "Company")}${th("stage", "Stage")}
       ${th("strategy", "Strategy", "hide-sm")}${fields.map(n => th("c:" + n, n, "hide-sm")).join("")}${th("next_step", "Next step", "hide-sm")}
       ${th("next_due", "Due", "hide-sm")}${th("updated", "Last activity", "hide-sm")}</tr></thead>
-    <tbody>${rows.map(c => `<tr data-id="${c.id}"><td><span class="tdwho">${c.ai_state ? aiMark(c) : ""}${esc(c.person)}</span></td><td>${esc(c.company)}</td><td><span class="tdstage">${esc(c.stage)}${dots(c)}${stuckTag(c)}</span></td>
+    <tbody>${rows.map(c => `<tr data-id="${c.id}"><td class="sel"><label class="selbox"><input type="checkbox" data-sel="${c.id}"${state.sel.has(c.id) ? " checked" : ""} aria-label="Pick ${esc(c.person || c.company)}"></label></td><td><span class="tdwho">${c.ai_state ? aiMark(c) : ""}${esc(c.person)}</span></td><td>${esc(c.company)}</td><td><span class="tdstage">${esc(c.stage)}${dots(c)}${stuckTag(c)}</span></td>
       <td class="hide-sm">${esc(c.strategy)}</td>${fields.map(n => `<td class="hide-sm">${esc(c.custom?.[n])}</td>`).join("")}
       <td class="hide-sm">${esc(c.next_step)}</td><td class="hide-sm">${fmt(c.next_due)}</td><td class="hide-sm">${fmt(c.updated)}</td></tr>`).join("")
-      || `<tr><td colspan="${7 + fields.length}" class="empty">No one matches these filters.</td></tr>`}</tbody></table>`;
+      || `<tr><td colspan="${8 + fields.length}" class="empty">No one matches these filters.</td></tr>`}</tbody></table>`;
+}
+
+function bulkBar() {
+  const n = state.sel.size;
+  return `<div class="bulk" id="bulk"${n ? "" : " hidden"}><span><b>${n}</b> picked</span>
+    <label class="vh" for="bulkStage">Move them to</label><select id="bulkStage" class="pick auto"><option value="" selected disabled>Move to stage</option>${state.board.stages.map(s => `<option>${esc(s.name)}</option>`).join("")}</select>
+    <button class="btn sm" id="bulkGo" type="button" disabled>Move ${n} ${n === 1 ? "person" : "people"}</button><button class="link" id="bulkClear" type="button">Clear</button></div>`;
+}
+function syncBulk() {
+  const old = $("#bulk"); if (!old) return;
+  const stage = $("#bulkStage").value; old.outerHTML = bulkBar();
+  if (stage) { $("#bulkStage").value = stage; $("#bulkGo").disabled = false; }
+  const boxes = [...document.querySelectorAll("[data-sel]")]; $("#selAll").checked = boxes.length && boxes.every(b => b.checked);
 }
 
 // ---- strategies ----------------------------------------------------------------------------------
@@ -1554,7 +1620,7 @@ async function openContact(id) {
   const warm = st.hot || st.kind === "won";
   const contacted = n == null ? "Not contacted yet" : n === 0 ? "Contacted today" : n === 1 ? "Contacted yesterday" : `Contacted ${n} days ago`;
   const held = c.hold_until && c.hold_until > today();
-  const status = `<div class="status">${stagePill(c)}${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}${stuckTag(c, true)}
+  const status = `<div class="status"><label class="vh" for="stage">Stage</label><select id="stage" class="stagesel" title="Move to another stage">${ws.stages.map(s => `<option ${s.name === c.stage ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>${dots(c)}${c.stage_changed ? `<span class="muted">since ${fmt(c.stage_changed)}</span>` : ""}${stuckTag(c, true)}
     ${held ? `<span class="muted">No stuck warning until ${fmt(c.hold_until)}</span>` : ""}
     <span class="${warm && (n == null || n >= 7) ? "cold" : "muted"}">${contacted}</span></div>`;
   const recent = c.touches.slice(0, 2), reply = c.touches.find(isReply);
@@ -1597,9 +1663,8 @@ async function openContact(id) {
     ${paused.length ? `<h3 class="sh">Paused</h3><p class="muted note">Strategy steps pause once someone is warm, so nothing automatic goes out. Resume one when it fits.</p>${paused.map(s => stepCard(s, false)).join("")}` : ""}
     <div class="row"><label class="vh" for="newType">Type of step to add</label><select id="newType" class="pick auto">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
       <button class="btn" id="addStep" type="button">Add step</button></div>
-    <h2>Stage and strategy</h2>
+    <h2>Strategy</h2>
     <div class="grid2">
-      <div><label for="stage">Stage</label><select id="stage" class="pick">${ws.stages.map(s => `<option ${s.name === c.stage ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
       <div><label for="strategy">Strategy</label><select id="strategy" class="pick"><option value="">None</option>${strategies.map(s =>
         `<option value="${s.id}" ${s.id === c.strategy_id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
       <div><label for="hold">Hold the stuck warning until</label><input id="hold" type="date" class="pick" value="${esc(c.hold_until || "")}"></div></div>
@@ -1631,12 +1696,7 @@ async function openContact(id) {
     };
   };
   $("#edit").onclick = () => showDetails(true);
-  $("#stage").onchange = async e => {
-    await api(`/api/contacts/${id}/stage`, { method: "POST", body: { stage: e.target.value } });
-    const [ch] = await api(`/api/changes?contact=${id}&limit=1`).catch(() => []);
-    toast(`Moved to ${e.target.value}`, ch?.can_undo ? async () => { await api(`/api/changes/${ch.id}/undo`, { method: "POST" }); toast(`Back to ${c.stage}`); refresh(id); } : null);
-    refresh(id);
-  };
+  $("#stage").onchange = e => moveStages([c.id], e.target.value);
   // killing asks first, in place: pick the closed stage, then confirm
   const kb = $("#kill");
   if (kb) kb.onclick = () => {
@@ -1748,6 +1808,30 @@ async function openContact(id) {
     }
   });
 }
+// the one way people change stage: the panel, Pipeline cards (Move or drag) and Everyone's bulk move all use it
+async function moveStages(ids, stage) {
+  const people = ids.map(id => state.board.contacts.find(c => c.id === Number(id))).filter(c => c && c.stage !== stage);
+  if (!people.length) return;
+  const undo = [], from = new Map(people.map(c => [c.id, c.stage]));
+  try {
+    for (const c of people) {
+      await api(`/api/contacts/${c.id}/stage`, { method: "POST", body: { stage } });
+      const [ch] = await api(`/api/changes?contact=${c.id}&limit=1`).catch(() => []);
+      if (ch?.can_undo) undo.push(ch.id);
+    }
+  } catch (e) { if (!undo.length) return load(); }
+  const n = undo.length || people.length, one = people.length === 1 ? people[0] : null;
+  const who = one ? one.person || one.company : `${n} ${n === 1 ? "person" : "people"}`;
+  toast(`Moved ${who} to ${stage}`, undo.length ? async () => {
+    for (const h of [...undo].reverse()) await api(`/api/changes/${h}/undo`, { method: "POST" });
+    toast(one ? `${who} is back in ${from.get(one.id)}` : `${who} are back where they were`); afterMove(ids);
+  } : null);
+  state.sel.clear(); afterMove(ids);
+}
+function afterMove(ids) {
+  if ($("#drawer").classList.contains("open") && ids.map(Number).includes(state.openFor)) return refresh(state.openFor);
+  return load();
+}
 async function refresh(id) { await flushAll(); await load(); openContact(id); }
 async function closeDrawer() {
   const d = $("#drawer");
@@ -1836,10 +1920,16 @@ document.addEventListener("click", async e => {
   if (co) { $("#q").value = co.dataset.company; state.view = "all"; state.f = noFilters(); savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return load(); }
   if (e.target.closest("[data-allcalls]")) { state.allCalls = !state.allCalls; return render(); }
   if (e.target.closest("[data-allemails]")) { state.allEmails = true; return render(); }
+  const mvb = e.target.closest("[data-move]");
+  if (mvb) return openMovePicker(mvb);
+  const ca = e.target.closest("[data-colall]");
+  if (ca) { state.colAll.add(ca.dataset.colall); return render(); }
+  if (e.target.closest("#bulkClear")) { state.sel.clear(); return render(); }
+  if (e.target.closest("#bulkGo")) { const st = $("#bulkStage").value; if (st) return moveStages([...state.sel], st); return; }
   const go = e.target.closest("[data-stagego]");
   if (go) { state.f = { ...noFilters(), stage: go.dataset.stagego }; state.view = "all"; savePrefs(); return render(); }
   if (e.target.closest("[data-stuckgo]")) { state.f = { ...noFilters(), due: "stuck" }; state.view = "all"; savePrefs(); try { localStorage.setItem("crm.view", state.view); } catch (e) {} return render(); }
-  const el = !e.target.closest("select, input, textarea, button, a") && e.target.closest("[data-id]");
+  const el = !e.target.closest("select, input, textarea, button, a, .selbox") && e.target.closest("[data-id]");
   if (el && !e.target.closest(".drawer")) return openContact(el.dataset.id);
   const tab = e.target.closest("#tabs button");
   if (tab) return setView(tab.dataset.v);
@@ -1892,6 +1982,9 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("change", e => {
   if (e.target.dataset?.hist) { state.hist[e.target.dataset.hist] = e.target.value; return renderHistory(); }
+  if (e.target.dataset?.sel) { state.sel[e.target.checked ? "add" : "delete"](Number(e.target.dataset.sel)); return syncBulk(); }
+  if (e.target.id === "selAll") { document.querySelectorAll("[data-sel]").forEach(b => { b.checked = e.target.checked; state.sel[b.checked ? "add" : "delete"](Number(b.dataset.sel)); }); return syncBulk(); }
+  if (e.target.id === "bulkStage") { $("#bulkGo").disabled = !e.target.value; return; }
   if (e.target.id === "stratPick") { const v = e.target.value; state.stratOpen = v === "new" ? "new" : v ? Number(v) : null; return render(); }
   const k = e.target.dataset?.f;
   if (k) { if (k.startsWith("c:")) state.f.custom[k.slice(2)] = e.target.value; else state.f[k] = e.target.value; savePrefs(); return render(); }
@@ -1902,6 +1995,20 @@ document.addEventListener("change", e => {
   }
 });
 $("#scrim").onclick = closeDrawer;
+// drag a Pipeline card onto another column to move them
+document.addEventListener("dragstart", e => {
+  const card = e.target.closest?.(".card[draggable]"); if (!card) return;
+  e.dataTransfer.setData("text/plain", card.dataset.id); e.dataTransfer.effectAllowed = "move"; card.classList.add("dragging");
+});
+document.addEventListener("dragend", e => { e.target.closest?.(".card")?.classList.remove("dragging"); document.querySelectorAll(".col.drop").forEach(x => x.classList.remove("drop")); });
+document.addEventListener("dragover", e => {
+  const col = e.target.closest?.("[data-col]"); if (!col || !document.querySelector(".card.dragging")) return;
+  e.preventDefault(); document.querySelectorAll(".col.drop").forEach(x => x !== col && x.classList.remove("drop")); col.classList.add("drop");
+});
+document.addEventListener("drop", e => {
+  const col = e.target.closest?.("[data-col]"), id = e.dataTransfer.getData("text/plain"); if (!col || !id) return;
+  e.preventDefault(); col.classList.remove("drop"); moveStages([Number(id)], col.dataset.col);
+});
 document.addEventListener("keydown", e => {
   if (e.key === "/" && !e.metaKey && !e.ctrlKey && !typing() && !document.activeElement?.matches("input, select, textarea") && !$("#drawer").classList.contains("open")) {
     e.preventDefault(); $("header").classList.add("searching"); $("#qbtn").setAttribute("aria-expanded", "true"); $("#q").focus(); $("#q").select(); return;
