@@ -100,6 +100,7 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .pill.blue { background: var(--soft); color: var(--ink); }
 .date { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .date.today { color: var(--ink); }
+.date.late { color: var(--ink); font-weight: 600; }
 .pill.paid { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
 .pill.dead { background: var(--soft); color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
 /* overview */
@@ -296,6 +297,8 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .dconvo .tlist { max-height: 480px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0; }
 .dconvo .msg { max-width: 92%; }
 .now { border: 2px solid var(--accent); border-radius: 12px; background: var(--panel); padding: 20px; }
+.now.finished { border: 1px solid var(--line); }
+.nocalls { margin: 0; }
 .now h3 { font-size: var(--text-xl); font-weight: 650; display: flex; gap: 8px; align-items: center; margin: 0; }
 .now .nmlink, .log-list .nmlink { font-size: inherit; color: var(--ink); font-weight: inherit; text-align: left; }
 .log-list .nmlink { font-weight: 600; justify-self: start; }
@@ -1057,7 +1060,7 @@ const siteLink = c => siteOf(c) ? `<a class="place site" href="${esc(siteOf(c))}
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
 function warmRow(c, extra = "", dim = false) {
   const said = c.last_said && !/^Strategy:/.test(c.last_said) && !(c.last_reply && /^replied/i.test(c.last_said)) ? c.last_said : "";
-  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
+  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${c.current.due && c.current.due < today() && !c.current.weekend ? `<span class="date late">Overdue since ${fmt(c.current.due)}</span>` : duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
   return `<div class="wrow${dim ? " held" : ""}" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
     <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${replyPeek(c)}${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
@@ -1105,7 +1108,7 @@ function warmPanel(list, all) {
   const groups = [
     { key: "hot", name: "Super hot", hint: "They said they're interested: Interested or further along, or Priority FOCUS or HOT. Chase them constantly. Focus first.", list: sets.hot, row: hotRow },
     { key: "upd", name: "Needs updates", hint: "Everyone past the cold stages, the person you haven't updated longest at the top. Log anything and they drop to the bottom.", list: sets.upd, row: hotRow },
-    { key: "call", name: "Call today", hint: "Warm people with a call due today or earlier.", list: byPlan(list.filter(callNow)) },
+    { key: "call", name: "Warm calls due", hint: "Warm people with a call due today or overdue. Your cold calls are in Calls today below.", list: byPlan(list.filter(callNow)) },
     { key: "follow", name: "Follow up", hint: "Every other warm lead, by when you next reach out. Anyone with nothing scheduled is at the top.",
       list: byNext(list.filter(c => !callNow(c) && !stageInfo()[c.stage]?.client)) },
     { key: "clients", name: "Clients", hint: "Active clients, kept out of the chase lists. Next step soonest first.", list: sets.clients, row: hotRow },
@@ -1144,7 +1147,7 @@ function callSession(calls, plan) {
   })() : "";
   const others = plan?.others ? `<p class="morecalls"><span class="muted">Backlog: ${plan.others} older overdue call${plan.others === 1 ? "" : "s"}.</span>
     <button class="link" type="button" data-allcalls>${state.allCalls ? "Hide the backlog" : "Work the backlog too"}</button></p>` : "";
-  const now = !c ? `<div class="now"><h3>${icon("done")}${plan?.plan ? "That's every call in today's plan" : ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
+  const now = !c ? `<div class="now finished"><h3>${icon("done")}${plan?.plan ? "That's every call in today's plan" : ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
       <p class="muted">${ses.log.length ? `${ses.log.length} logged, ${warmN} warm. The warm ones are in the panel above with their next outreach.` : "New ones show up here on the day they're due."}</p></div>` : `
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
@@ -1165,6 +1168,7 @@ function callSession(calls, plan) {
   const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
     <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(outcomeName(x.outcome))}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
     || `<li class="muted">Each call you log shows up here, with undo.</li>`;
+  if (!c && !ses.log.length) return `<p class="muted nocalls">${plan?.plan ? "No calls left in today's plan." : "No calls due today. New ones show up here on the day they're due."}</p>${others}`;
   return `${total ? `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
       <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>` : ""}
     ${blockHead}<div class="session"><div>${now}${others}</div><div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
