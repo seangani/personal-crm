@@ -459,7 +459,8 @@ textarea.short { min-height: 72px; }
   .x { width: 44px; height: 44px; }
   .chips { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .chip { min-height: 44px; }
   .stp textarea { max-height: 240px; }
-  .stp.cur .acts { position: sticky; bottom: 0; z-index: 1; background: var(--panel); margin: 12px -12px 0; padding: 8px 12px; border-top: 1px solid var(--line); }
+  .stp .h .t { white-space: normal; overflow-wrap: anywhere; }
+  .stp.cur:not(.call) .acts { position: sticky; bottom: 0; z-index: 1; background: var(--panel); margin: 12px -12px 0; padding: 8px 12px; border-top: 1px solid var(--line); }
   .stp .h, .stepedit summary, .drawer .sub .link { min-height: 44px; }
   table .hide-sm { display: none; }
   .grid2 { grid-template-columns: minmax(0, 1fr); }
@@ -1226,7 +1227,14 @@ function renderOverview() {
   const backlog = planDay ? rest : coldCalls.filter(c => c.current.due < t);
   const calls = [...todays, ...(state.allCalls ? backlog : [])];
   const emails = byDue(list.filter(c => cold(c) && c.current.type === "email"));
-  const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type)));
+  // due today: meetings (late ones too, an unlogged meeting shouldn't vanish), warm people's steps, and other cold to-dos,
+  // so nothing due today hides inside the warm tabs while the calls card says there's nothing to do
+  const inCalls = new Set(todays.map(c => c.id)), TODAY_ORDER = { meeting: 0, call: 1, email: 2 };
+  const dueToday = list.filter(c => !done(c) && c.current?.due && !inCalls.has(c.id) &&
+      (c.current.type === "meeting" ? c.current.due <= t : c.current.due === t && (st[c.stage]?.hot || !["call", "email"].includes(c.current.type))))
+    .sort((a, b) => (TODAY_ORDER[a.current.type] ?? 3) - (TODAY_ORDER[b.current.type] ?? 3) || (a.current.due < b.current.due ? -1 : 1));
+  const todayIds = new Set(dueToday.map(c => c.id));
+  const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type) && !todayIds.has(c.id)));
   const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
 
   const strip = `<p class="pulse"><span class="hotn${has(warm.length)}"><b>${warm.length}</b> warm</span>, <b>${interested}</b> interested or further,
@@ -1237,6 +1245,8 @@ function renderOverview() {
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
   const callSec = `<div class="section" id="calls"><div class="head"><h2>${planDay ? "Today's plan" : "Calls today"}</h2><span class="n">${todays.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, { others: backlog.length, plan: planDay })}</div>`;
+  const todaySec = dueToday.length ? `<div class="section" id="today"><div class="head"><h2>Due today</h2><span class="n">${dueToday.length}</span></div>
+    <div class="rows">${dueToday.map(row).join("")}</div></div>` : "";
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
     ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
       <div class="rows">${shownEmails.map(row).join("")}</div>
@@ -1253,7 +1263,7 @@ function renderOverview() {
       }).join("")}</tbody></table></div>`;
   const sname = state.f.strategy === "none" ? "people with no strategy" : state.board.strategies.find(x => String(x.id) === state.f.strategy)?.name;
   const filteredNote = sname ? `<p class="filtered">Showing ${esc(sname)} only, so every number below counts ${list.length} of ${state.board.contacts.length} people.</p>` : "";
-  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
+  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + todaySec + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
 }
 
 function renderBoard() {
@@ -1456,12 +1466,14 @@ function stepBody(s, c) {
       : `<button class="btn primary" data-act="addemail" type="button">Add their email</button><button class="btn" data-act="copy" type="button">Copy</button>`;
   } else if (s.type === "call") {
     fields = `${phone ? `<a class="phone" href="tel:${esc(phone)}">${icon("call")}${esc(phone)}</a>` : `<p class="muted">No phone number saved. Add one with Edit details.</p>`}
-      ${body("Talking points", "short", "What to say or ask")}
+      ${draft(s, "body") ? `<div class="lbl">Talking points</div><div class="points" data-points>${esc(draft(s, "body"))}</div>
+        <button class="link" type="button" data-editpoints>Edit talking points</button><div hidden data-pointsedit>${body("Talking points", "short", "What to say or ask")}</div>`
+        : `<button class="link" type="button" data-editpoints>Add talking points</button><div hidden data-pointsedit>${body("Talking points", "short", "What to say or ask")}</div>`}
       <div class="lbl" id="${id("out")}">What happened?</div>
       <div class="chips" role="group" aria-labelledby="${id("out")}">${CALL_LOG.map(([v, l]) =>
         `<button class="chip" type="button" data-outcome="${v}" aria-pressed="false">${l}</button>`).join("")}</div>
       ${lab("note", "Note (optional)")}<input id="${id("note")}" data-s="note" placeholder="Wants a demo Tuesday" enterkeyhint="done">`;
-    actions = `<button class="btn primary" data-act="logcall" type="button">Log call</button>`;
+    actions = `<button class="btn primary" data-act="logcall" type="button" disabled>Log call</button><span class="muted pickfirst">Pick what happened first</span>`;
   } else if (s.type === "text") {
     fields = `<p class="to"><span class="muted">To</span> ${phone ? esc(phone) : `<span class="muted">no number saved</span>`}</p>${body("Message", "short")}`;
     actions = `<button class="btn primary" data-act="done" type="button">Mark sent</button>
@@ -1520,7 +1532,7 @@ async function openContact(id) {
 
   const stepCard = (s, isCur) => {
     const open = state.open.has(s.id);
-    return `<div class="stp${isCur ? " cur" : ""}" data-step="${s.id}">
+    return `<div class="stp ${esc(s.type)}${isCur ? " cur" : ""}" data-step="${s.id}">
       <button class="h" type="button" aria-expanded="${open}" aria-controls="sb${s.id}"${isCur ? ' aria-current="step"' : ""}>${icon(s.type)}
         <span class="t">${esc(stepLabel(s))}</span>${isCur ? `<span class="pill blue">Next</span>` : ""}${s.status === "paused" ? `<span class="pill">Paused</span>` : duePill(s.due, true, s.weekend)}</button>
       <div class="b" id="sb${s.id}"${open ? "" : " hidden"}>${stepBody(s, c)}</div></div>`;
@@ -1655,9 +1667,17 @@ async function openContact(id) {
     card.querySelectorAll(".chip").forEach(ch => ch.onclick = () => {
       outcome = ch.dataset.outcome;
       card.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", String(x === ch)));
+      const lb = card.querySelector('[data-act="logcall"]'); if (lb) lb.disabled = false;
+      card.querySelector(".pickfirst")?.remove();
     });
+    const ep = card.querySelector("[data-editpoints]");
+    if (ep) ep.onclick = () => {
+      const box = card.querySelector("[data-pointsedit]"); box.hidden = false; ep.hidden = true;
+      card.querySelector("[data-points]")?.remove(); card.querySelector(".b .lbl:not([id])")?.remove(); box.querySelector("textarea").focus();
+    };
     const noteEl = card.querySelector('[data-s="note"]');
-    if (noteEl) noteEl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); card.querySelector('[data-act="logcall"]').click(); } };
+    if (noteEl) noteEl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); const lb = card.querySelector('[data-act="logcall"]');
+      if (lb.disabled) { toast("Pick what happened first"); card.querySelector(".chip").focus(); } else lb.click(); } };
     const finish = async (o, note, msg) => {
       await flushStep(sid);
       const r = await api(`/api/steps/${sid}/done`, { method: "POST", body: { outcome: o, note } });
