@@ -26,7 +26,7 @@
   --text-xs: 12px; --text-sm: 13px; --text-md: 15px; --text-lg: 17px; --text-xl: 20px; --text-2xl: 28px;
   --bg: oklch(98.6% 0.004 85); --panel: oklch(99.8% 0.003 85); --ink: oklch(23% 0.015 260); --muted: oklch(47% 0.015 260);
   --line: oklch(90.5% 0.006 85); --soft: oklch(95.6% 0.006 85);
-  --accent: oklch(48% 0.15 255); --accent-ink: oklch(99% 0.005 255); --accent-bg: oklch(95% 0.03 255);
+  --accent: oklch(28% 0.015 260); --accent-ink: oklch(99% 0.004 85); --accent-bg: oklch(93.5% 0.006 85);
   --warn: oklch(52% 0.12 70); --warn-bg: oklch(95% 0.05 85); --ok: oklch(47% 0.11 160); --ok-bg: oklch(94.5% 0.04 160);
   --hot: oklch(54% 0.15 45); --hot-bg: oklch(95% 0.04 60); --dead: oklch(50% 0.17 27); --dead-bg: oklch(95.5% 0.03 25);
   --closed: oklch(55% 0.012 260); --focus: oklch(55% 0.17 255); --ai: oklch(50% 0.13 300); --ai-bg: oklch(95% 0.03 300); --st-other: oklch(52% 0.15 350);
@@ -37,7 +37,7 @@
   :root {
     --bg: oklch(18% 0.012 260); --panel: oklch(22% 0.014 260); --ink: oklch(93% 0.006 85); --muted: oklch(72% 0.012 260);
     --line: oklch(31% 0.014 260); --soft: oklch(26% 0.014 260);
-    --accent: oklch(74% 0.12 255); --accent-ink: oklch(18% 0.012 260); --accent-bg: oklch(30% 0.06 255);
+    --accent: oklch(92% 0.006 85); --accent-ink: oklch(18% 0.012 260); --accent-bg: oklch(30% 0.012 260);
     --warn: oklch(82% 0.12 85); --warn-bg: oklch(31% 0.05 85); --ok: oklch(78% 0.12 160); --ok-bg: oklch(30% 0.05 160);
     --hot: oklch(78% 0.13 55); --hot-bg: oklch(31% 0.06 50); --dead: oklch(74% 0.14 25); --dead-bg: oklch(30% 0.06 25);
     --closed: oklch(66% 0.012 260); --focus: oklch(76% 0.13 255); --ai: oklch(78% 0.11 300); --ai-bg: oklch(30% 0.06 300); --st-other: oklch(76% 0.12 350);
@@ -79,7 +79,9 @@ input.search { flex: 0 1 280px; min-width: 140px; min-height: 36px; padding: 4px
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.danger { color: var(--dead); }
 .btn.sm { min-height: 32px; padding: 0 12px; font-size: var(--text-sm); }
-.link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: var(--text-sm); }
+.link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: var(--text-sm);
+  text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 0.2em; }
+.link:hover { text-decoration-color: currentColor; }
 .link:hover { text-decoration: underline; }
 main { padding: 20px; max-width: var(--container); margin-inline: auto; }
 .head { display: flex; align-items: baseline; gap: 8px; margin: 24px 0 8px; }
@@ -92,14 +94,14 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .co { color: var(--muted); margin-left: 8px; }
 .pill { font-size: var(--text-xs); padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--muted); white-space: nowrap; }
 .pill.late { background: var(--warn-bg); color: var(--warn); }
-.pill.stuck { display: inline-flex; gap: 4px; align-items: center; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.pill.stuck { display: inline-flex; gap: 4px; align-items: center; background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
 .pill.stuck .i { width: 12px; height: 12px; }
 .pill.hot { background: var(--hot-bg); color: var(--hot); }
 .pill.blue { background: var(--soft); color: var(--ink); }
 .date { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .date.today { color: var(--ink); }
 .pill.paid { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
-.pill.dead { background: var(--dead-bg); color: var(--dead); }
+.pill.dead { background: var(--soft); color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
 /* overview */
 .section { margin-top: 40px; }
 .section > .head:first-child { margin-top: 0; }
@@ -153,9 +155,9 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .pulse b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pulse .hotn.has b { color: var(--hot); } .pulse .paidn.has b { color: var(--ok); }
 .pulse .link { margin-left: 4px; }
-.ai { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ai); flex: none; }
+.ai { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); flex: none; }
 .ai .i { width: 14px; height: 14px; }
-.ai.batch { background: var(--ai-bg); }
+.ai.batch { background: var(--soft); color: var(--ink); }
 .tdwho { display: inline-flex; gap: 4px; align-items: center; }
 .tdstage { display: flex; flex-direction: column; gap: 4px; }
 .stgd { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
@@ -186,7 +188,7 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .wmeta .ask { color: var(--ink); }
 .wrote { color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card .rq { margin-top: 4px; font-size: var(--text-xs); color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.reply { border: 1px solid var(--line); background: var(--hot-bg); border-radius: 8px; padding: 8px 12px; margin: 12px 0 0; font-size: var(--text-sm); }
+.reply { border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 8px 12px; margin: 12px 0 0; font-size: var(--text-sm); }
 .reply .rh { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .reply p { margin: 4px 0 0; max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
 .killrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; font-size: var(--text-sm); }
@@ -229,7 +231,8 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .tlist { display: flex; flex-direction: column; gap: 12px; }
 .msg { max-width: min(640px, 88%); border: 1px solid var(--line); border-radius: 16px; padding: 12px 16px; background: var(--panel); font-size: var(--text-sm); }
 .msg.out { border-bottom-right-radius: 4px; align-self: flex-end; background: var(--accent-bg); border-color: transparent; }
-.msg.in { border-bottom-left-radius: 4px; align-self: flex-start; background: var(--hot-bg); border-color: transparent; }
+.msg.in { border-bottom-left-radius: 4px; align-self: flex-start; background: var(--soft); border-color: transparent; }
+.warmth .msg.in, .reply.warmth { background: var(--hot-bg); }
 .msg .mh { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; color: var(--muted); font-size: var(--text-xs); }
 .msg .ms { font-weight: 600; color: var(--ink); margin-top: 4px; }
 .msg .mb { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -323,14 +326,15 @@ input.callnote { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px so
 .ov-row .nx span { overflow: hidden; text-overflow: ellipsis; }
 .ov-row .due { justify-self: end; }
 .dots { display: inline-flex; gap: 2px; align-items: center; flex: none; }
-.dots i { --dot: var(--st-other); width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--dot); display: block; flex: none; }
-.dots i.email { --dot: var(--accent); } .dots i.call { --dot: var(--ok); } .dots i.close { --dot: var(--closed); }
+.dots i { --dot: var(--muted); width: 7px; height: 7px; border-radius: 1px; border: 1.5px solid var(--dot); display: block; flex: none; }
+.dots i.email { border-radius: 50%; } .dots i.other { transform: rotate(45deg) scale(0.85); } .dots i.close { height: 4px; border-radius: 1px; }
+.dots i.at { --dot: var(--ink); }
 .dots i.f { background: var(--dot); }
 .dots i.at { width: 11px; height: 11px; background: var(--dot); }
 .dots i.s { background: var(--dot); border-color: transparent; opacity: 0.3; }
 .dots i.p { border-style: dashed; }
 .dots.dead i { border-color: var(--line); background: var(--soft); }
-.dots.dead i.end { width: 9px; height: 9px; background: var(--dead); border-color: var(--dead); }
+.dots.dead i.end { width: 9px; height: 9px; background: var(--closed); border-color: var(--closed); }
 details.fold summary { cursor: pointer; color: var(--muted); margin: 24px 0 8px; font-size: var(--text-sm); }
 .skeleton { display: grid; gap: 12px; margin-top: 8px; }
 .skeleton i { display: block; height: 40px; border-radius: 8px; background: var(--soft); }
@@ -649,7 +653,7 @@ function dots(c) {
     : p.paused ? `${past} of ${n} steps done, ${p.paused} paused` : `All ${n} steps done`;
   return `<span class="dots" role="img" aria-label="${esc(label)}" title="${esc(label)}">${out.join("")}</span>`;
 }
-const dotLegend = `<div class="legend" aria-label="Step dot colors"><span class="dots"><i class="email f"></i></span>Email<span class="dots"><i class="call f"></i></span>Call
+const dotLegend = `<div class="legend" aria-label="Step dot shapes"><span class="dots"><i class="email f"></i></span>Email<span class="dots"><i class="call f"></i></span>Call
   <span class="dots"><i class="other f"></i></span>Text, LinkedIn, meeting, to do<span class="dots"><i class="close f"></i></span>Close if no reply</div>`;
 function nextText(c) {
   const s = c.current;
@@ -777,7 +781,7 @@ async function renderConvo() {
   const y = window.scrollY;
   $("#main").innerHTML = shell(`<div class="thead"><h2>${esc(c.person || c.company)}</h2>${c.person ? `<span class="muted">${esc(c.company)}</span>` : ""}${stagePill(c)}
       <button class="link" type="button" data-open="${c.id}">Open profile</button></div>
-    <div class="tlist">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
+    <div class="tlist${stageInfo()[c.stage]?.hot ? " warmth" : ""}">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
   window.scrollTo(0, y);
 }
 
@@ -1493,14 +1497,14 @@ async function openContact(id) {
     <div class="sub">${esc(c.role && c.person ? `${c.role} at ${c.company}` : c.role || (c.person ? c.company : ""))}
       <button class="link" id="edit" type="button">Edit details</button></div>
     ${status}
-    ${reply ? `<div class="reply"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
+    ${reply ? `<div class="reply${stageInfo()[c.stage]?.hot ? " warmth" : ""}"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
       <p class="pre">${esc(replyText(reply))}</p></div>` : ""}
     ${killed ? `<div class="killrow"><span class="pill dead">Killed</span><span class="muted">Every planned step was skipped.</span><button class="link" id="unkill" type="button">Undo kill</button></div>`
       : dead ? "" : `<div class="killrow" id="killrow">${clientStage && c.stage !== clientStage ? `<button class="btn sm" id="mkclient" type="button">Make active client</button>` : ""}
         ${c.stage === clientStage ? `<span class="pill paid">Active client</span>${/Marked active client/.test(lastStage?.summary || "") ? `<button class="link" id="unclient" type="button">Undo</button>` : ""}` : ""}
         <button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
     ${talk.length ? `<details class="fold dconvo" id="dconvo" open><summary>Emails, replies and calls (${talk.length})</summary>
-      <div class="tlist">${talk.map(convoItem).join("")}</div></details>` : ""}
+      <div class="tlist${stageInfo()[c.stage]?.hot ? " warmth" : ""}">${talk.map(convoItem).join("")}</div></details>` : ""}
     ${recent.filter(t => t !== reply).length ? `<ul class="timeline recent">${recent.filter(t => t !== reply).map(touchItem).join("")}</ul>` : ""}
     <div id="details">${detailsView(c, shownPhone)}</div>
     <h2>Steps</h2>
