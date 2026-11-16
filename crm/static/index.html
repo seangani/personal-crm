@@ -364,6 +364,13 @@ details.lane > summary { cursor: pointer; color: var(--muted); font-size: var(--
 .board { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
 .col { flex: 0 0 248px; max-height: 70vh; overflow-y: auto; border-radius: 8px; }
 .col.none { flex-basis: 132px; } .col.none .colhead h3 { color: var(--muted); font-weight: 500; }
+.cchips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.cchip { display: inline-flex; gap: 8px; align-items: baseline; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); cursor: pointer; font-size: var(--text-sm); }
+.cchip b { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
+.cchip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); } .cchip[aria-pressed="true"] b { color: var(--ink); }
+.cchip:disabled { cursor: default; color: var(--muted); opacity: 0.6; } .cchip:hover:not(:disabled) { border-color: var(--accent); }
+.cchip.drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; } .cgrid .card { margin: 0; }
 .col.drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
 .col .more-btn { width: 100%; }
 .card .cfoot { display: flex; align-items: center; gap: 8px; margin-top: 4px; } .card .cfoot:empty { display: none; }
@@ -487,7 +494,7 @@ textarea.short { min-height: 72px; }
   .stp.cur:not(.call) .acts { position: sticky; bottom: 0; z-index: 1; background: var(--panel); margin: 12px -12px 0; padding: 8px 12px; border-top: 1px solid var(--line); }
   .stp .h, .stepedit summary, .drawer .sub .link { min-height: 44px; }
   table .hide-sm { display: none; }
-  .board { flex-direction: column; overflow-x: visible; gap: 8px; } .col { flex: none; width: 100%; max-height: none; } .col.none { display: none; }
+  .board { flex-direction: column; overflow-x: visible; gap: 8px; } .col { flex: none; width: 100%; max-height: none; } .col.none { display: none; } .cgrid { grid-template-columns: minmax(0, 1fr); }
   .card .mv, .card select.mvsel { min-height: 44px; } .selbox { padding: 12px; }
   .grid2 { grid-template-columns: minmax(0, 1fr); }
   .ov-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who due" "nx dots"; gap: 4px 12px; padding: 12px 4px; }
@@ -1334,18 +1341,30 @@ function boardCol(s, list) {
 function renderBoard() {
   const list = filtered(true, false);
   if (noMatch(list)) { $("#main").innerHTML = filterBar({ stage: false }, 0) + noMatch(list); return; }
-  const warm = s => s.hot || s.kind === "won";
-  const lanes = [["Warm", s => warm(s) && s.kind !== "closed"], ["In outreach", s => !warm(s) && s.kind !== "closed"], ["Closed", s => s.kind === "closed"]];
-  const html = lanes.map(([title, test]) => {
-    const stages = state.board.stages.filter(test), names = new Set(stages.map(s => s.name));
-    const n = list.filter(c => names.has(c.stage)).length;
-    if (!stages.length) return "";
-    const board = `<div class="board">${stages.map(s => boardCol(s, list)).join("")}</div>`;
-    return title === "Closed"
-      ? `<details class="lane"${state.closedOpen ? " open" : ""} id="closedLane"><summary>Closed (${n})</summary>${board}</details>`
-      : `<section class="lane"><div class="lanehead"><h2>${title}</h2><span class="n">${n}</span></div>${board}</section>`;
-  }).join("");
-  $("#main").innerHTML = filterBar({ stage: false }, list.length) + html;
+  const isWarm = s => (s.hot || s.kind === "won") && s.kind !== "closed";
+  const count = name => list.filter(c => c.stage === name).length;
+  // warm and paid stages get columns, so they fit the first screen; empty ones are named in one line instead
+  const warmStages = state.board.stages.filter(isWarm), warmFull = warmStages.filter(s => count(s.name)), warmEmpty = warmStages.filter(s => !count(s.name));
+  const warmN = warmFull.reduce((n, s) => n + count(s.name), 0);
+  const warmSec = `<section class="lane"><div class="lanehead"><h2>Warm</h2><span class="n">${warmN}</span></div>
+    ${warmEmpty.length ? `<p class="muted note">Nobody in ${warmEmpty.map(s => esc(s.name)).join(", ")} right now.</p>` : ""}
+    ${warmFull.length ? `<div class="board">${warmFull.map(s => boardCol(s, list)).join("")}</div>` : `<div class="empty">No warm leads right now.</div>`}</section>`;
+  // cold stages fold into one lane: a count per stage, and one stage's cards at a time (All cold by default)
+  const coldStages = state.board.stages.filter(s => !isWarm(s) && s.kind !== "closed"), coldNames = new Set(coldStages.map(s => s.name));
+  const cold = list.filter(c => coldNames.has(c.stage));
+  if (state.coldStage && (!coldNames.has(state.coldStage) || !count(state.coldStage))) state.coldStage = "";
+  const pickN = state.coldStage || "", shownAll = byDue(pickN ? cold.filter(c => c.stage === pickN) : cold);
+  const key = "cold:" + pickN, shown = state.colAll.has(key) ? shownAll : shownAll.slice(0, BOARD_CAP);
+  const chip = (name, n, label) => `<button class="cchip" type="button" data-coldstage="${esc(name)}"${name ? ` data-col="${esc(name)}"` : ""} aria-pressed="${pickN === name}"${n ? "" : " disabled"}>${esc(label || name)}<b>${n}</b></button>`;
+  const coldSec = `<section class="lane"><div class="lanehead"><h2>Cold</h2><span class="n">${cold.length}</span></div>
+    <div class="cchips" role="group" aria-label="Cold stages">${chip("", cold.length, "All cold")}${coldStages.map(s => chip(s.name, count(s.name))).join("")}</div>
+    <div class="cgrid">${shown.map(boardCard).join("")}</div>
+    ${shownAll.length > shown.length ? `<button class="btn sm more-btn" data-colall="${esc(key)}" type="button">Show all ${shownAll.length}</button>` : ""}</section>`;
+  const closedStages = state.board.stages.filter(s => s.kind === "closed"), closedNames = new Set(closedStages.map(s => s.name));
+  const closedN = list.filter(c => closedNames.has(c.stage)).length;
+  const closedSec = closedStages.length ? `<details class="lane"${state.closedOpen ? " open" : ""} id="closedLane"><summary>Closed (${closedN})</summary>
+    <div class="board">${closedStages.map(s => boardCol(s, list)).join("")}</div></details>` : "";
+  $("#main").innerHTML = filterBar({ stage: false }, list.length) + warmSec + coldSec + closedSec;
   const cl = $("#closedLane"); if (cl) cl.ontoggle = () => { state.closedOpen = cl.open; };
 }
 // Move on a card turns into a stage picker in place
@@ -1920,6 +1939,8 @@ document.addEventListener("click", async e => {
   if (mvb) return openMovePicker(mvb);
   const ca = e.target.closest("[data-colall]");
   if (ca) { state.colAll.add(ca.dataset.colall); return render(); }
+  const cs = e.target.closest("[data-coldstage]");
+  if (cs) { state.coldStage = cs.dataset.coldstage; return render(); }
   if (e.target.closest("#bulkClear")) { state.sel.clear(); return render(); }
   if (e.target.closest("#bulkGo")) { const st = $("#bulkStage").value; if (st) return moveStages([...state.sel], st); return; }
   const go = e.target.closest("[data-stagego]");
@@ -1996,10 +2017,10 @@ document.addEventListener("dragstart", e => {
   const card = e.target.closest?.(".card[draggable]"); if (!card) return;
   e.dataTransfer.setData("text/plain", card.dataset.id); e.dataTransfer.effectAllowed = "move"; card.classList.add("dragging");
 });
-document.addEventListener("dragend", e => { e.target.closest?.(".card")?.classList.remove("dragging"); document.querySelectorAll(".col.drop").forEach(x => x.classList.remove("drop")); });
+document.addEventListener("dragend", e => { e.target.closest?.(".card")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach(x => x.classList.remove("drop")); });
 document.addEventListener("dragover", e => {
   const col = e.target.closest?.("[data-col]"); if (!col || !document.querySelector(".card.dragging")) return;
-  e.preventDefault(); document.querySelectorAll(".col.drop").forEach(x => x !== col && x.classList.remove("drop")); col.classList.add("drop");
+  e.preventDefault(); document.querySelectorAll(".drop").forEach(x => x !== col && x.classList.remove("drop")); col.classList.add("drop");
 });
 document.addEventListener("drop", e => {
   const col = e.target.closest?.("[data-col]"), id = e.dataTransfer.getData("text/plain"); if (!col || !id) return;
