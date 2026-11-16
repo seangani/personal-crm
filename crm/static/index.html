@@ -323,14 +323,14 @@ input.callnote { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px so
 .log-list .o { grid-column: 1; color: var(--muted); font-size: var(--text-xs); }
 .log-list .warmo { color: var(--hot); font-weight: 600; }
 .more-btn { display: flex; width: 100%; margin-top: 8px; }
-.ov-row { display: grid; grid-template-columns: minmax(0, 1.5fr) 132px 72px minmax(0, 1.6fr) 108px; gap: 12px; align-items: center;
+.ov-row { display: grid; grid-template-columns: minmax(0, 1.5fr) 132px 72px minmax(0, 1.6fr) minmax(108px, max-content); gap: 12px; align-items: center;
   padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: var(--text-sm); }
 .ov-row:hover { background: var(--soft); }
 .ov-row .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-row .who b { font-weight: 600; }
 .ov-row .nx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
 .ov-row .nx span { overflow: hidden; text-overflow: ellipsis; }
-.ov-row .due { justify-self: end; }
+.ov-row .due { justify-self: end; white-space: nowrap; }
 .dots { display: inline-flex; gap: 2px; align-items: center; flex: none; }
 .dots i { --dot: var(--muted); width: 7px; height: 7px; border-radius: 1px; border: 1.5px solid var(--dot); display: block; flex: none; }
 .dots i.email { border-radius: 50%; } .dots i.other { transform: rotate(45deg) scale(0.85); } .dots i.close { height: 4px; border-radius: 1px; }
@@ -426,6 +426,8 @@ textarea.short { min-height: 72px; }
 .drawer select.pick, .drawer input.pick { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .drawer input.pick { color: var(--ink); color-scheme: light dark; }
 .drawer select.pick.auto { width: auto; }
+#today h3.sh { display: flex; gap: 8px; align-items: baseline; font-size: var(--text-md); font-weight: 600; margin: 20px 0 8px; }
+#today h3.sh:first-of-type { margin-top: 8px; } #today h3.sh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .drawer h3.sh { font-size: var(--text-md); font-weight: 600; margin: 24px 0 0; }
 .stp { border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; }
 .stp .h { display: flex; gap: 8px; align-items: center; width: 100%; padding: 8px 12px; min-height: 44px; border: 0; border-radius: 11px;
@@ -846,8 +848,8 @@ async function renderConvo() {
   const people = convoPeople();
   if (!people.some(c => c.id === state.convo)) state.convo = people[0]?.id || null;
   const list = people.map(convoRow).join("");
-  const shell = (thread) => `<div class="section"><div class="head"><h2>Conversations</h2><div class="grow"></div><span class="count">${people.length} warm</span></div>
-    <p class="muted note">Everything you and each warm lead have said, oldest first, with the next step pinned at the bottom.</p>
+  const shell = (thread) => `<div class="section"><div class="head"><h2>Conversations</h2><div class="grow"></div><span class="count">${people.length} ${people.length === 1 ? "person" : "people"}</span></div>
+    <p class="muted note">Warm leads, plus anyone in Not now or marked Priority FOCUS or HOT. Everything you and each of them said, oldest first, with the next step pinned at the bottom.</p>
     <div class="convo"><div class="clist" role="region" aria-label="Warm leads">${list || `<div class="empty">No warm leads right now.</div>`}</div>
     <div class="thread" id="thread">${thread}</div></div></div>`;
   if (!state.convo) { $("#main").innerHTML = shell(""); return; }
@@ -1285,7 +1287,7 @@ function renderOverview() {
     .sort((a, b) => (TODAY_ORDER[a.current.type] ?? 3) - (TODAY_ORDER[b.current.type] ?? 3) || (a.current.due < b.current.due ? -1 : 1));
   const todayIds = new Set(dueToday.map(c => c.id));
   const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type) && !todayIds.has(c.id)));
-  const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
+  const shownEmails = state.allEmails ? emails : emails.slice(0, 8), inBatch = emails.filter(c => c.ai_state === "batch").length;
 
   const strip = `<p class="pulse"><span class="hotn${has(warm.length)}"><b>${warm.length}</b> warm</span>, <b>${interested}</b> interested or further,
     <span class="paidn${has(paid)}"><b>${paid}</b> at a paid stage</span>, <b>${dead}</b> dead.
@@ -1295,26 +1297,20 @@ function renderOverview() {
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
   const callSec = `<div class="section" id="calls"><div class="head"><h2>${planDay ? "Today's plan" : "Calls today"}</h2><span class="n">${todays.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, { others: backlog.length, plan: planDay })}</div>`;
-  const todaySec = dueToday.length ? `<div class="section" id="today"><div class="head"><h2>Due today</h2><span class="n">${dueToday.length}</span></div>
-    <div class="rows">${dueToday.map(row).join("")}</div></div>` : "";
-  const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
-    ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
-      <div class="rows">${shownEmails.map(row).join("")}</div>
-      ${emails.length > shownEmails.length ? `<button class="btn more-btn" data-allemails type="button">Show all ${emails.length} emails</button>` : ""}`
-      : `<div class="empty">No emails due.</div>`}</div>`;
-  const otherSec = other.length ? `<div class="section"><div class="head"><h2>Other things due</h2><span class="n">${other.length}</span></div><div class="rows">${other.map(row).join("")}</div></div>` : "";
-  const strat = !state.board.strategies.length ? "" : `<div class="section"><div class="head"><h2>Strategies</h2></div>
-    <table class="stable"><thead><tr><th>Strategy</th><th class="num">People</th><th class="num">Interested</th><th class="num">Closed<span class="hide-sm"> (paid)</span></th><th class="num">Dead</th>
-      <th class="hide-sm">Steps</th></tr></thead><tbody>${state.board.strategies.map(s => {
-        const n = stratNumbers(s.id), last = s.steps[s.steps.length - 1];
-        return `<tr data-strat="${s.id}"><td><b>${esc(s.name)}</b></td><td class="num">${n.volume}</td><td class="num">${n.intrPct}%</td>
-          <td class="num">${n.closedPct}%</td><td class="num">${n.deadPct}%</td>
-          <td class="hide-sm muted">${s.steps.length} steps over ${last ? last.day : 0} days</td></tr>`;
-      }).join("")}</tbody></table></div>`;
+  // one list for everything else to reach today (critique 11/16): it replaced Due today, Emails to send, Other things due
+  // and the Strategies table (that lives on the Strategies tab). The call sheet stays its own box
+  const group = (title, rows, extra = "") => rows.length ? `<h3 class="sh">${title}<span class="n">${rows.length}</span></h3>${extra}<div class="rows">${rows.map(row).join("")}</div>` : "";
+  const reachN = dueToday.length + emails.length + other.length;
+  const reachSec = `<div class="section" id="today"><div class="head"><h2>Reach today</h2><span class="n">${reachN}</span></div>
+    ${reachN ? group("Due today", dueToday)
+      + group("Emails to send", shownEmails, inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : "")
+      + (emails.length > shownEmails.length ? `<button class="btn more-btn" data-allemails type="button">Show all ${emails.length} emails</button>` : "")
+      + group(other.length === 1 ? "Other to-do overdue" : "Other to-dos overdue", other)
+      : `<p class="muted nocalls">Nothing else to reach today.</p>`}</div>`;
   const sname = state.f.strategy === "none" ? "people with no strategy" : state.board.strategies.find(x => String(x.id) === state.f.strategy)?.name;
   const filteredNote = sname ? `<p class="filtered">Showing ${esc(sname)} only, so every number below counts ${list.length} of ${state.board.contacts.length} people.</p>` : "";
   if (noMatch(list)) { $("#main").innerHTML = filterBar({ stage: false, due: false }, 0) + noMatch(list); return; }
-  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + todaySec + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
+  $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + reachSec + (calls.length ? callSec + warmSec : warmSec + callSec);
 }
 
 // lanes so the board fits the data (critique 11/16): warm people first, cold outreach next, closed folded away
