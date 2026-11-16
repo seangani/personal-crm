@@ -333,6 +333,7 @@ input.callnote { width: 100%; min-height: 36px; padding: 4px 8px; border: 1px so
 .dots { display: inline-flex; gap: 2px; align-items: center; flex: none; }
 .dots i { --dot: var(--muted); width: 7px; height: 7px; border-radius: 1px; border: 1.5px solid var(--dot); display: block; flex: none; }
 .dots i.email { border-radius: 50%; } .dots i.other { transform: rotate(45deg) scale(0.85); } .dots i.close { height: 4px; border-radius: 1px; }
+.dots i { position: relative; } .dots i::after { content: ""; position: absolute; inset: -5px -2px; }
 .dots i.at { --dot: var(--ink); }
 .dots i.f { background: var(--dot); }
 .dots i.at { width: 11px; height: 11px; background: var(--dot); }
@@ -677,7 +678,13 @@ const DOT_STATE = { done: "f", skipped: "s", paused: "p", planned: "" };
 const dotType = t => ["email", "call", "close"].includes(t) ? t : "other";
 function dots(c) {
   const p = c.progress || {}, steps = p.steps || [], past = (p.done || 0) + (p.skipped || 0), n = steps.length;
-  const out = steps.map(([type, status], i) => `<i class="${dotType(type)} ${i === past && status === "planned" ? "at" : DOT_STATE[status] ?? ""}"></i>`);
+  // hover a dot to see what it is: "Call #2, next up" (numbered within its type, so Email #1, Call #1, Email #2 ...)
+  const seen = {}, STATUS_WORD = { done: "done", skipped: "skipped", paused: "paused", planned: "planned" };
+  const out = steps.map(([type, status], i) => {
+    const k = TYPES[type] || type, num = seen[k] = (seen[k] || 0) + 1, at = i === past && status === "planned";
+    const tip = type === "close" ? `${k}, ${at ? "next up" : STATUS_WORD[status] || status}` : `${k} #${num}, ${at ? "next up" : STATUS_WORD[status] || status}`;
+    return `<i class="${dotType(type)} ${at ? "at" : DOT_STATE[status] ?? ""}" title="${esc(tip)}"></i>`;
+  });
   if (stageInfo()[c.stage]?.kind === "closed") {
     const label = `Closed: ${c.stage}${n ? `, after ${p.done} of ${n} steps` : ""}`;
     return `<span class="dots dead" role="img" aria-label="${esc(label)}" title="${esc(label)}">${steps.map(() => "<i></i>").join("")}<i class="end"></i></span>`;
