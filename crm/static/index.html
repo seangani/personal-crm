@@ -16,7 +16,7 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: custom (the project's own)
  * paper: oklch(98.6% 0.004 85) · accent: oklch(48% 0.15 255) · display: system sans · body: system sans
  * nav: top bar, four tabs and one action · signature: the call list with its what-happened log · states: loading, empty, error, full
- * axes: warm paper/system/ink blue · posture: restrained · contrast: pass · v2.0.0 */
+ * axes: warm paper/system/ink (neutral accent since 11/15) · posture: restrained · contrast: pass · v2.0.0 */
 /* Hallmark · pre-emit critique: P3 H- E3 S3 R3 V4 · weakest: S, colour was spent on every number and pill; now colour marks only warm, paid and overdue, numbers and funnel share one panel, strategies a table */
 /* Impeccable polish 10/29: mode operate · one summary panel · dates as text, overdue as the only date pill · no icons on section heads · themed scrollbars, caret, placeholder */
 /* answered F7: inputs and buttons share one recipe on purpose, an input matches the button beside it (craft § 9) */
@@ -182,10 +182,12 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .wrow, .log-list li[data-id], .nowtop { cursor: pointer; }
 .wrow:hover, .log-list li[data-id]:hover { background: var(--soft); }
 .wnext { justify-self: end; min-width: 0; }
-.nxo { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 340px; }
-.nxo > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wmeta { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; padding-left: 28px; color: var(--muted); }
+.nxo { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 420px; }
+.nxo > span:first-of-type { min-width: 0; overflow-wrap: anywhere; }
+.wmeta { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; color: var(--muted); min-width: 0; }
+.wmeta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wmeta .ask { color: var(--ink); }
+.nonx { color: var(--warn); font-weight: 600; }
 .wrote { color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card .rq { margin-top: 4px; font-size: var(--text-xs); color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .reply { border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 8px 12px; margin: 12px 0 0; font-size: var(--text-sm); }
@@ -420,6 +422,8 @@ textarea.short { min-height: 72px; }
 .chip { min-height: 40px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: left; cursor: pointer; font-size: var(--text-sm); }
 .chip:hover { border-color: var(--accent); }
 .chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); font-weight: 600; }
+.chip .hk { display: inline-block; min-width: 1.4em; margin-right: 4px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+@media (hover: none) { .chip .hk { display: none; } }
 .saved { font-size: var(--text-xs); color: var(--muted); margin-left: auto; }
 .stepedit { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
 .stepedit summary { cursor: pointer; color: var(--muted); font-size: var(--text-sm); min-height: 32px; display: flex; align-items: center; }
@@ -464,6 +468,7 @@ textarea.short { min-height: 72px; }
   .ov-row .stg { display: none; }
   .seq li { grid-template-columns: 56px minmax(0, 1fr); } .seq .counts { grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 16px; }
   .wrow { grid-template-columns: minmax(0, 1fr) auto; } .wnext { grid-column: 1 / -1; justify-self: stretch; } .nxo { display: flex; max-width: 100%; } .wmeta { padding-left: 0; }
+  .points { max-height: none; overflow: visible; }
   .session { grid-template-columns: minmax(0, 1fr); } .now { padding: 16px; } .tab { min-width: 108px; padding: 12px; } .tabpanel { padding: 4px 12px 12px; }
   .btn, input.callnote, .filters select, nav button, input.search, .drawer select.pick, .drawer input.pick, .box input, .stp input, .stp select, .btn.sm { min-height: 44px; }
   input, select, textarea { font-size: 16px; }
@@ -696,6 +701,8 @@ function stageClass(name) {
 function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(c.stage)}</span>`; }
 // Sean's rule: nobody sits in one stage over 4 days. The server works it out (won, closed and held people never get it)
 // the warning shows on warm leads only (Sean, 11/15): on cold stages it flagged 363 of 442 people and stopped meaning anything
+// replies get the warm tint only when the person is warm by choice: Replied is where every reply lands automatically, a "no" included
+const warmTint = c => !!stageInfo()[c.stage]?.hot && c.stage !== "Replied";
 const isStuck = c => !!c.stale_days && !!stageInfo()[c.stage]?.hot;
 const stuckTag = (c, long) => isStuck(c) ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
   ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
@@ -748,16 +755,18 @@ function convoPeople() {
   const info = stageInfo();
   return state.board.contacts.filter(c => info[c.stage]?.kind !== "closed" &&
     (info[c.stage]?.hot || CONVO_STAGES.has(c.stage) || /^(focus|hot)/i.test(priorityOf(c))))
-    .sort((a, b) => (b.last_touch || "") < (a.last_touch || "") ? -1 : (b.last_touch || "") > (a.last_touch || "") ? 1 : 0);
+    .sort((a, b) => need(a) - need(b) || ((b.last_touch || "") < (a.last_touch || "") ? -1 : (b.last_touch || "") > (a.last_touch || "") ? 1 : 0));
 }
+// what needs you first: no next step, then overdue, then due today, then the rest (newest contact first within each)
+const need = c => !c.current ? 0 : c.current.due && c.current.due < today() ? 1 : c.current.due === today() ? 2 : 3;
 const lowerKind = k => ({ voicemail: "voicemail", bump: "bump" })[k] || kindLabel(k).toLowerCase();
 function convoRow(c) {
   const pr = priorityOf(c), badge = /^(focus|hot)/i.test(pr) ? `<span class="pill hot">${icon("hot")}${esc(pr.split(/\s/)[0].toUpperCase())}</span>` : "";
-  const nx = c.current ? `Next: ${c.current.label || TYPES[c.current.type]}${c.current.due ? ` ${fmt(c.current.due)}` : ""}` : "No next step";
+  const nx = c.current ? `Next: ${c.current.label || TYPES[c.current.type]}${c.current.due ? ` ${fmt(c.current.due)}` : ""}` : "";
   return `<button class="crow" type="button" data-convo="${c.id}" aria-current="${state.convo === c.id}">
     <span class="ct"><b class="cn">${esc(c.person || c.company)}</b>${badge}</span>
     <span class="cm"><span>${c.person ? esc(c.company) : ""}</span><span>${stagePill(c)}</span>
-      <span>${c.last_touch ? `Last: ${esc(lowerKind(c.last_kind))} ${fmt(c.last_touch)}` : "No contact yet"}</span><span>${esc(nx)}</span></span></button>`;
+      <span>${c.last_touch ? `Last: ${esc(lowerKind(c.last_kind))} ${fmt(c.last_touch)}` : "No contact yet"}</span>${nx ? `<span>${esc(nx)}</span>` : `<span class="nonx">No next step</span>`}</span></button>`;
 }
 function convoItem(t) {
   const when = `${fmt(t.at)}${t.at.length > 10 ? `, ${clock(t.at)}` : ""}`;
@@ -807,7 +816,7 @@ async function renderConvo() {
   const y = window.scrollY;
   $("#main").innerHTML = shell(`<div class="thead"><h2>${esc(c.person || c.company)}</h2>${c.person ? `<span class="muted">${esc(c.company)}</span>` : ""}${stagePill(c)}
       <button class="link" type="button" data-open="${c.id}">Open profile</button></div>
-    <div class="tlist${stageInfo()[c.stage]?.hot ? " warmth" : ""}">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
+    <div class="tlist${warmTint(c) ? " warmth" : ""}">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
   window.scrollTo(0, y);
 }
 
@@ -1007,7 +1016,7 @@ async function renderAnalytics(a) {
 // ---- overview: the numbers, warm leads, a calling session, then the rest of today -------------------
 // the outreach chat's mark: outline = it has seen them and saved a plan, filled = they're in the next batch
 function aiMark(c) {
-  if (!c.ai_state) return `<span class="ai" aria-hidden="true"></span>`;
+  if (!c.ai_state) return "";
   const label = c.ai_state === "batch" ? `In the next outreach batch${c.ai_note ? `: ${c.ai_note}` : ""}`
     : `The outreach chat has a plan for them${c.ai_note ? `: ${c.ai_note}` : ""}`;
   return `<span class="ai ${c.ai_state}" title="${esc(label)}" role="img" aria-label="${esc(label)}">${icon("ai")}</span>`;
@@ -1144,8 +1153,8 @@ function callSession(calls, plan) {
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
       ${c.last_touch ? `<p class="seeconvo"><button class="link" type="button" data-convofor="${c.id}">See the emails you sent and what they wrote back</button></p>` : ""}
       <div class="lbl" id="whl">What happened?</div>
-      <div class="chips" role="group" aria-labelledby="whl">${CALL_LOG.map(([v, t]) =>
-        `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}" type="button" data-pick="${v}" aria-pressed="${state.pick === v}">${t}</button>`).join("")}</div>
+      <div class="chips" role="group" aria-labelledby="whl">${CALL_LOG.map(([v, t], i) =>
+        `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}" type="button" data-pick="${v}" aria-pressed="${state.pick === v}" aria-keyshortcuts="${i + 1}"><span class="hk" aria-hidden="true">${i + 1}</span>${t}</button>`).join("")}</div>
       <label for="callNote">Note (optional)</label><input id="callNote" class="callnote" placeholder="Wants a demo Tuesday" enterkeyhint="done" value="${esc(state.pickNote || "")}">
       <div class="go"><button class="btn primary" id="logNext" type="button"${state.pick ? "" : " disabled"}>Log and next</button>
         <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
@@ -1524,14 +1533,14 @@ async function openContact(id) {
       <button class="link" id="edit" type="button">Edit details</button></div>
     ${status}
     ${cur ? `<div class="nextup">${stepCard(cur, true)}</div>` : `<div class="nonext">${icon("alert")}<span>No next step planned${paused.length ? ". The strategy is paused because they're warm." : "."} Add one under Steps so they don't go cold.</span></div>`}
-    ${reply ? `<div class="reply${stageInfo()[c.stage]?.hot ? " warmth" : ""}"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
+    ${reply ? `<div class="reply${warmTint(c) ? " warmth" : ""}"><div class="rh"><b>They wrote</b><span class="muted">${fmt(reply.at)}${reply.subject ? `, ${esc(reply.subject)}` : ""}</span></div>
       <p class="pre">${esc(replyText(reply))}</p></div>` : ""}
     ${killed ? `<div class="killrow"><span class="pill dead">Killed</span><span class="muted">Every planned step was skipped.</span><button class="link" id="unkill" type="button">Undo kill</button></div>`
       : dead ? "" : `<div class="killrow" id="killrow">${clientStage && c.stage !== clientStage ? `<button class="btn sm" id="mkclient" type="button">Make active client</button>` : ""}
         ${c.stage === clientStage ? `<span class="pill paid">Active client</span>${/Marked active client/.test(lastStage?.summary || "") ? `<button class="link" id="unclient" type="button">Undo</button>` : ""}` : ""}
         <button class="btn sm danger" id="kill" type="button">Kill lead</button></div>`}
     ${talk.length ? `<details class="fold dconvo" id="dconvo"><summary>Emails, replies and calls (${talk.length})</summary>
-      <div class="tlist${stageInfo()[c.stage]?.hot ? " warmth" : ""}">${talk.map(convoItem).join("")}</div></details>` : ""}
+      <div class="tlist${warmTint(c) ? " warmth" : ""}">${talk.map(convoItem).join("")}</div></details>` : ""}
     ${recent.filter(t => t !== reply).length ? `<ul class="timeline recent">${recent.filter(t => t !== reply).map(touchItem).join("")}</ul>` : ""}
     <div id="details">${detailsView(c, shownPhone)}</div>
     <h2>Steps</h2>
@@ -1814,6 +1823,12 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("input", e => { if (e.target.id === "callNote") state.pickNote = e.target.value; });
+// keys 1 to 8 pick a call outcome on the calling card, then Enter logs it (not while typing or with the panel open)
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || typing() || document.activeElement?.matches("input, select, textarea") || $("#drawer").classList.contains("open") || !/^[1-8]$/.test(e.key)) return;
+  const chip = document.querySelectorAll(".now [data-pick]")[Number(e.key) - 1];
+  if (chip) { e.preventDefault(); chip.click(); }
+});
 document.addEventListener("change", e => {
   if (e.target.dataset?.hist) { state.hist[e.target.dataset.hist] = e.target.value; return renderHistory(); }
   if (e.target.id === "stratPick") { const v = e.target.value; state.stratOpen = v === "new" ? "new" : v ? Number(v) : null; return render(); }
