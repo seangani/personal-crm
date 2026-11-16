@@ -528,9 +528,9 @@ textarea.short { min-height: 72px; }
   </nav>
   <select class="viewpick" id="viewpick" aria-label="View"></select>
   <div class="grow"></div>
-  <button class="btn iconbtn" id="qbtn" type="button" aria-label="Search" aria-expanded="false" aria-controls="q"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5 -3.5"/></svg></button>
+  <button class="btn iconbtn" id="qbtn" type="button" aria-label="Search" title="Search (press /)" aria-expanded="false" aria-controls="q"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5 -3.5"/></svg></button>
   <input class="search" id="q" placeholder="Search names, companies, emails, phones" type="search" aria-keyshortcuts="/">
-  <button class="btn" id="add" type="button" aria-label="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
+  <button class="btn" id="add" type="button" aria-label="Add person" title="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
 </header>
 <p class="offline" id="offline" role="status" hidden>Can’t reach the CRM right now, so what you see may be out of date. It reconnects on its own.</p>
 <main id="main"><div class="skeleton" aria-label="Loading your pipeline"><i></i><i></i><i></i><i></i></div>
@@ -567,7 +567,10 @@ const ICONS = {
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   pin: '<path d="M12 21s-6 -5.4 -6 -10.5a6 6 0 1 1 12 0c0 5.1 -6 10.5 -6 10.5z"/><circle cx="12" cy="10.5" r="2"/>',
 };
-const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ICONS.task}</svg>`;
+const ICON_LABEL = { email: "Email", call: "Call", text: "Text", linkedin: "LinkedIn message", meeting: "Meeting", task: "To do", close: "Close if no reply",
+  done: "Done", hot: "Priority", clock: "Due", wait: "Waiting", x: "Close", ai: "AI", building: "Company", alert: "Needs attention", globe: "Website", pin: "Location" };
+const icon = (n, label = ICON_LABEL[n] || "To do") => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${label
+  ? `role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>` : 'aria-hidden="true">'}${ICONS[n] || ICONS.task}</svg>`;
 const TYPES = { email: "Email", call: "Call", text: "Text", linkedin: "LinkedIn", meeting: "Meeting", task: "To do", close: "Close if no reply" };
 const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"], ["stuck", "Warm leads stuck over 4 days"], ["stuckall", "Anyone stuck over 4 days"]];
 const noFilters = () => ({ stage: "", due: "", strategy: "", custom: {} });
@@ -738,8 +741,8 @@ function dots(c) {
     : p.paused ? `${past} of ${n} steps done, ${p.paused} paused` : `All ${n} steps done`;
   return `<span class="dots" role="img" aria-label="${esc(label)}" title="${esc(label)}">${out.join("")}</span>`;
 }
-const dotLegend = `<div class="legend" aria-label="Step dot shapes"><span class="dots"><i class="email f"></i></span>Email<span class="dots"><i class="call f"></i></span>Call
-  <span class="dots"><i class="other f"></i></span>Text, LinkedIn, meeting, to do<span class="dots"><i class="close f"></i></span>Close if no reply</div>`;
+const dotLegend = `<div class="legend" aria-label="Step dot shapes"><span class="dots" title="An email step"><i class="email f"></i></span>Email<span class="dots" title="A call step"><i class="call f"></i></span>Call
+  <span class="dots" title="A text, LinkedIn, meeting or to-do step"><i class="other f"></i></span>Text, LinkedIn, meeting, to do<span class="dots" title="The last step: close them if they never reply"><i class="close f"></i></span>Close if no reply</div>`;
 function nextText(c) {
   const s = c.current;
   if (!s) return `<span class="muted">${c.progress?.paused ? "Paused, needs a next step" : "No next step"}</span>`;
@@ -758,7 +761,7 @@ function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(
 // replies get the warm tint only when the person is warm by choice: Replied is where every reply lands automatically, a "no" included
 const warmTint = c => !!stageInfo()[c.stage]?.hot && c.stage !== "Replied";
 const isStuck = c => !!c.stale_days && !!stageInfo()[c.stage]?.hot;
-const stuckTag = (c, long) => isStuck(c) ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
+const stuckTag = (c, long) => isStuck(c) ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert", "")}${long
   ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
 // the outcome buttons; Make Loom took Call back later's place (Sean, 11/13), which still names older log entries
 const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
@@ -815,7 +818,7 @@ function convoPeople() {
 const need = c => !c.current ? 0 : c.current.due && c.current.due < today() ? 1 : c.current.due === today() ? 2 : 3;
 const lowerKind = k => ({ voicemail: "voicemail", bump: "bump" })[k] || kindLabel(k).toLowerCase();
 function convoRow(c) {
-  const pr = priorityOf(c), badge = /^(focus|hot)/i.test(pr) ? `<span class="pill hot">${icon("hot")}${esc(pr.split(/\s/)[0].toUpperCase())}</span>` : "";
+  const pr = priorityOf(c), badge = /^(focus|hot)/i.test(pr) ? `<span class="pill hot" title="Priority ${esc(pr.split(/\s/)[0].toUpperCase())}">${icon("hot", "Priority")}${esc(pr.split(/\s/)[0].toUpperCase())}</span>` : "";
   const nx = c.current ? `Next: ${c.current.label || TYPES[c.current.type]}${c.current.due ? ` ${fmt(c.current.due)}` : ""}` : "";
   return `<button class="crow" type="button" data-convo="${c.id}" aria-current="${state.convo === c.id}">
     <span class="ct"><b class="cn">${esc(c.person || c.company)}</b>${badge}</span>
@@ -1073,14 +1076,14 @@ function aiMark(c) {
   if (!c.ai_state) return "";
   const label = c.ai_state === "batch" ? `In the next outreach batch${c.ai_note ? `: ${c.ai_note}` : ""}`
     : `The outreach chat has a plan for them${c.ai_note ? `: ${c.ai_note}` : ""}`;
-  return `<span class="ai ${c.ai_state}" title="${esc(label)}" role="img" aria-label="${esc(label)}">${icon("ai")}</span>`;
+  return `<span class="ai ${c.ai_state}" title="${esc(label)}" role="img" aria-label="${esc(label)}">${icon("ai", "")}</span>`;
 }
-const aiLegend = `<div class="legend"><span><span class="ai seen">${icon("ai")}</span>AI has a plan</span><span><span class="ai batch">${icon("ai")}</span>In the next batch</span></div>`;
+const aiLegend = `<div class="legend"><span title="The outreach chat has a plan for them"><span class="ai seen">${icon("ai", "")}</span>AI has a plan</span><span title="In the next outreach batch"><span class="ai batch">${icon("ai", "")}</span>In the next batch</span></div>`;
 const daysText = n => n == null ? "never" : n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
 const contactedText = c => { const n = daysSince(c.last_touch); return `<span class="${n == null || n >= 7 ? "cold" : "muted"}">${daysText(n)}</span>`; };
 const whoCell = c => `<div class="who" data-open="${c.id}">${aiMark(c)}<span class="nm"><b>${esc(c.person || c.company)}</b>${c.person ? `<span class="co">${esc(c.company)}</span>` : ""}</span></div>`;
 const others = c => state.board.contacts.filter(x => x.company === c.company && x.id !== c.id).length;
-const companyTag = c => `<button class="tag" type="button" data-company="${esc(c.company)}" title="Everyone at ${esc(c.company)}">${icon("building")}<span>${esc(c.company)}</span>${others(c) ? `<span class="tagn">+${others(c)} here</span>` : ""}</button>`;
+const companyTag = c => `<button class="tag" type="button" data-company="${esc(c.company)}" title="Everyone at ${esc(c.company)}">${icon("building", "")}<span>${esc(c.company)}</span>${others(c) ? `<span class="tagn">+${others(c)} here</span>` : ""}</button>`;
 const AREA_STATE = (() => { const m = {}; "205 251 256 334 659 938".split(" ").forEach(c => m[c] = "AL"); "907".split(" ").forEach(c => m[c] = "AK"); "480 520 602 623 928".split(" ").forEach(c => m[c] = "AZ"); "479 501 870".split(" ").forEach(c => m[c] = "AR"); "209 213 279 310 323 341 350 408 415 424 442 510 530 559 562 619 626 628 650 657 661 669 707 714 747 760 805 818 820 831 840 858 909 916 925 949 951".split(" ").forEach(c => m[c] = "CA"); "303 719 720 970 983".split(" ").forEach(c => m[c] = "CO"); "203 475 860 959".split(" ").forEach(c => m[c] = "CT"); "302".split(" ").forEach(c => m[c] = "DE"); "202 771".split(" ").forEach(c => m[c] = "DC"); "239 305 321 324 352 386 407 448 561 645 656 689 727 728 754 772 786 813 850 863 904 941 954".split(" ").forEach(c => m[c] = "FL"); "229 404 470 478 678 706 762 770 912 943".split(" ").forEach(c => m[c] = "GA"); "808".split(" ").forEach(c => m[c] = "HI"); "208 986".split(" ").forEach(c => m[c] = "ID"); "217 224 309 312 331 447 464 618 630 708 730 773 779 815 847 861 872".split(" ").forEach(c => m[c] = "IL"); "219 260 317 463 574 765 812 930".split(" ").forEach(c => m[c] = "IN"); "319 515 563 641 712".split(" ").forEach(c => m[c] = "IA"); "316 620 785 913".split(" ").forEach(c => m[c] = "KS"); "270 364 502 606 859".split(" ").forEach(c => m[c] = "KY"); "225 318 337 504 985".split(" ").forEach(c => m[c] = "LA"); "207".split(" ").forEach(c => m[c] = "ME"); "227 240 301 410 443 667".split(" ").forEach(c => m[c] = "MD"); "339 351 413 508 617 774 781 857 978".split(" ").forEach(c => m[c] = "MA"); "231 248 269 313 517 586 616 679 734 810 906 947 989".split(" ").forEach(c => m[c] = "MI"); "218 320 507 612 651 763 952".split(" ").forEach(c => m[c] = "MN"); "228 601 662 769".split(" ").forEach(c => m[c] = "MS"); "235 314 417 557 573 636 660 816".split(" ").forEach(c => m[c] = "MO"); "406".split(" ").forEach(c => m[c] = "MT"); "308 402 531".split(" ").forEach(c => m[c] = "NE"); "702 725 775".split(" ").forEach(c => m[c] = "NV"); "603".split(" ").forEach(c => m[c] = "NH"); "201 551 609 640 732 848 856 862 908 973".split(" ").forEach(c => m[c] = "NJ"); "505 575".split(" ").forEach(c => m[c] = "NM"); "212 315 329 332 347 363 516 518 585 607 624 631 646 680 716 718 838 845 914 917 929 934".split(" ").forEach(c => m[c] = "NY"); "252 336 472 704 743 828 910 919 980 984".split(" ").forEach(c => m[c] = "NC"); "701".split(" ").forEach(c => m[c] = "ND"); "216 220 234 283 326 330 380 419 436 440 513 567 614 740 937".split(" ").forEach(c => m[c] = "OH"); "405 539 572 580 918".split(" ").forEach(c => m[c] = "OK"); "458 503 541 971".split(" ").forEach(c => m[c] = "OR"); "215 223 267 272 412 445 484 570 582 610 717 724 814 835 878".split(" ").forEach(c => m[c] = "PA"); "401".split(" ").forEach(c => m[c] = "RI"); "803 821 839 843 854 864".split(" ").forEach(c => m[c] = "SC"); "605".split(" ").forEach(c => m[c] = "SD"); "423 615 629 731 865 901 931".split(" ").forEach(c => m[c] = "TN"); "210 214 254 281 325 346 361 409 430 432 469 512 682 713 726 737 806 817 830 832 903 915 936 940 945 956 972 979".split(" ").forEach(c => m[c] = "TX"); "385 435 801".split(" ").forEach(c => m[c] = "UT"); "802".split(" ").forEach(c => m[c] = "VT"); "276 434 540 571 703 757 804 826 948".split(" ").forEach(c => m[c] = "VA"); "206 253 360 425 509 564".split(" ").forEach(c => m[c] = "WA"); "304 681".split(" ").forEach(c => m[c] = "WV"); "262 274 353 414 534 608 715 920".split(" ").forEach(c => m[c] = "WI"); "307".split(" ").forEach(c => m[c] = "WY"); return m; })();
 const STATES = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
   DC: "Washington, DC", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas",
@@ -1420,7 +1423,7 @@ function stratStep(s = { type: "email", day: 0 }) {
       <input data-k="subject" value="${esc(s.subject)}" placeholder="Email subject (optional)" ${s.type === "email" ? "" : "hidden"}>
       <textarea data-k="body" placeholder="${s.type === "email" ? "Message template (optional)" : "Notes or talking points (optional)"}">${esc(s.body)}</textarea>
       <label class="wk"><input type="checkbox" data-k="weekend"${s.weekend ? " checked" : ""}>On the weekend (next Saturday)</label></div>
-    <button class="btn sm" data-rm type="button" aria-label="Remove step">${icon("x")}</button></div>`;
+    <button class="btn sm" data-rm type="button" aria-label="Remove step" title="Remove step">${icon("x", "")}</button></div>`;
 }
 function stratCard(s) {
   return `<div class="strat" data-sid="${s.id || ""}">
@@ -1658,7 +1661,7 @@ async function openContact(id) {
   };
   const strategies = state.board.strategies;
   d.innerHTML = `<div class="dhead"><h2 class="name" id="dname" tabindex="-1">${esc(c.person || c.company)}</h2>
-      <button class="x" id="close" type="button" aria-label="Close">${icon("x")}</button></div>
+      <button class="x" id="close" type="button" aria-label="Close" title="Close">${icon("x", "")}</button></div>
     <div class="dbody" id="dbody">
     <div class="sub">${esc(c.role && c.person ? `${c.role} at ${c.company}` : c.role || (c.person ? c.company : ""))}
       <button class="link" id="edit" type="button">Edit details</button></div>
@@ -1868,7 +1871,7 @@ function addForm() {
   const ws = curWs(), d = $("#drawer"), strategies = state.board.strategies;
   if (!d.classList.contains("open")) state.returnFocus = document.activeElement;
   d.innerHTML = `<div class="dhead"><h2 class="name" id="dname" tabindex="-1">Add person</h2>
-      <button class="x" id="close" type="button" aria-label="Close">${icon("x")}</button></div>
+      <button class="x" id="close" type="button" aria-label="Close" title="Close">${icon("x", "")}</button></div>
     <div class="dbody"><div class="box">${["company", "person", "role", "email", "phone"].map(f =>
       `<label for="f-${f}">${f === "company" ? "Company (required)" : f[0].toUpperCase() + f.slice(1)}</label><input id="f-${f}">`).join("")}
       <label for="f-stage">Stage</label><select id="f-stage">${ws.stages.map(s => `<option>${esc(s.name)}</option>`).join("")}</select>
