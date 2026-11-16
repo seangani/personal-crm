@@ -501,7 +501,7 @@ textarea.short { min-height: 72px; }
   <select class="viewpick" id="viewpick" aria-label="View"></select>
   <div class="grow"></div>
   <button class="btn iconbtn" id="qbtn" type="button" aria-label="Search" aria-expanded="false" aria-controls="q"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5 -3.5"/></svg></button>
-  <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
+  <input class="search" id="q" placeholder="Search names, companies, emails, phones" type="search">
   <button class="btn" id="add" type="button" aria-label="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
 </header>
 <p class="offline" id="offline" role="status" hidden>Can’t reach the CRM right now, so what you see may be out of date. It reconnects on its own.</p>
@@ -1120,7 +1120,7 @@ function hotRow(c) {
   const tag = isFocus(c) ? `<span class="pill paid">Focus</span>` : "";
   return warmRow(c, `<span class="hacts">${tag}${held}<span class="${!isHeld(c) && (n == null || n > 4) ? "cold" : ""}">Updated ${ago(c.last_update)}</span>
     ${ph ? `<a class="tel" href="tel:${esc(ph)}">${icon("call")}${esc(ph)}</a>` : `<span class="muted">No number</span>`}
-    <button class="btn sm" type="button" data-logfor="${c.id}">Log</button></span>`, isHeld(c));
+    <button class="btn sm" type="button" data-logfor="${c.id}">Log update</button></span>`, isHeld(c));
 }
 function warmPanel(list, all) {
   const t = today(), callNow = c => c.current?.type === "call" && (!c.current.due || c.current.due <= t);
@@ -1209,7 +1209,7 @@ async function logSessionCall() {
     ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0, block: planOf(c)?.block || 0 });
     ses.skipped = ses.skipped.filter(id => id !== cid);
     saveSession(); state.pick = ""; state.pickNote = "";
-    toast(outcome === "loom" ? "Call logged. Record and send a Loom is on today's to do list" : r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
+    toast(outcome === "loom" ? "Call logged. “Record and send a Loom” is now on today's list" : r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
     await load();
     if (r.after_call_step) openEmail(cid, r.after_call_step);
   } catch (e) { $("#logNext").disabled = false; }
@@ -1342,8 +1342,8 @@ function stratCard(s) {
     <div class="muted note">${s.id ? `${s.used} people follow it.` : "New strategy."} Day 0 is the day someone starts. Steps move off weekends to Monday, except ones marked On the weekend, which go to the next Saturday.</div>
     <div class="ssteps">${(s.steps || []).map(stratStep).join("")}</div>
     <div class="row"><button class="btn sm" data-addstep>Add step</button><div class="grow"></div>
-      ${s.id && !s.used ? `<button class="btn sm danger" data-delstrat>Delete</button>` : ""}
-      <button class="btn primary sm" data-savestrat>Save</button></div></div>`;
+      ${s.id && !s.used ? `<button class="btn sm danger" data-delstrat>Delete strategy</button>` : ""}
+      <button class="btn primary sm" data-savestrat>Save strategy</button></div></div>`;
 }
 // a share of contacted people; one decimal under 10% so 1 in 239 doesn't read as zero
 const share = (n, of) => { if (!of) return 0; const v = 100 * n / of; return v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
@@ -1623,7 +1623,7 @@ async function openContact(id) {
       d.querySelectorAll("[data-e]").forEach(i => body[i.dataset.e] = i.value.trim());
       d.querySelectorAll("[data-custom]").forEach(i => body.custom[i.dataset.custom] = i.value.trim());
       body.notes = $("#e-notes").value.trim();
-      if (!body.company) { toast("Company is required"); return $("#e-company").focus(); }
+      if (!body.company) { toast("Add a company name first. Every person needs one"); return $("#e-company").focus(); }
       await api(`/api/contacts/${id}`, { method: "PATCH", body }); toast("Details saved"); refresh(id);
     };
   };
@@ -1738,10 +1738,10 @@ async function openContact(id) {
         if (!outcome) { toast("Pick what happened first"); return card.querySelector(".chip").focus(); }
         await finish(outcome, val("note").trim(), "Call logged");
       }
-      else if (act === "resume") { await flushStep(sid); await api(`/api/steps/${sid}`, { method: "PATCH", body: { status: "planned" } }); toast("Resumed"); refresh(id); }
+      else if (act === "resume") { await flushStep(sid); await api(`/api/steps/${sid}`, { method: "PATCH", body: { status: "planned" } }); toast("Step resumed"); refresh(id); }
       else if (act === "skip") { if (!await askInline(b.parentElement, "Skip this step? It moves to done as skipped and the next one becomes current.", "Skip step")) return;
-        await flushStep(sid); await api(`/api/steps/${sid}/skip`, { method: "POST" }); state.open.delete(sid); toast("Skipped"); refresh(id); }
-      else if (act === "remove") { if (!await askInline(b.parentElement, "Remove this planned step?", "Remove step")) return; pendingSaves.delete(sid); await api(`/api/steps/${sid}`, { method: "DELETE" }); toast("Removed"); refresh(id); }
+        await flushStep(sid); await api(`/api/steps/${sid}/skip`, { method: "POST" }); state.open.delete(sid); toast("Step skipped"); refresh(id); }
+      else if (act === "remove") { if (!await askInline(b.parentElement, "Remove this planned step?", "Remove step")) return; pendingSaves.delete(sid); await api(`/api/steps/${sid}`, { method: "DELETE" }); toast("Step removed"); refresh(id); }
     }
   });
 }
@@ -1773,7 +1773,7 @@ function addForm() {
   $("#create").onclick = async () => {
     const body = { workspace: state.ws, stage: $("#f-stage").value, strategy: $("#f-strategy") ? Number($("#f-strategy").value) || null : null };
     ["company", "person", "role", "email", "phone"].forEach(f => body[f] = $(`#f-${f}`).value.trim());
-    if (!body.company) { toast("Company is required"); return $("#f-company").focus(); }
+    if (!body.company) { toast("Add a company name first. Every person needs one"); return $("#f-company").focus(); }
     const c = await api("/api/contacts", { method: "POST", body }); await load(); openContact(c.id);
   };
 }
@@ -1809,7 +1809,7 @@ document.addEventListener("click", async e => {
   const cf = e.target.closest("[data-convofor]");
   if (cf) { await openContact(cf.dataset.convofor); const f = $("#dconvo"); if (f) { f.open = true; f.scrollIntoView({ block: "start" }); } return; }
   const cd = e.target.closest("[data-cdone]");
-  if (cd) { cd.disabled = true; await api(`/api/steps/${cd.dataset.cdone}/done`, { method: "POST", body: {} }); toast("Done"); return load(); }
+  if (cd) { cd.disabled = true; await api(`/api/steps/${cd.dataset.cdone}/done`, { method: "POST", body: {} }); toast(cd.textContent.trim() === "Mark sent" ? "Marked sent" : "Marked done"); return load(); }
   const lf = e.target.closest("[data-logfor]");
   if (lf) { await openContact(lf.dataset.logfor); const s = $("#summary"); s?.scrollIntoView({ block: "center" }); return s?.focus({ preventScroll: true }); }
   const opener = e.target.closest("[data-open]");
