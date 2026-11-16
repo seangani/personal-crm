@@ -1238,7 +1238,10 @@ async function logSessionCall() {
     ses.log.push({ step, cid, name: c.person || c.company, outcome, note, moved: r.stage !== c.stage ? r.stage : "", email: r.after_call_step || 0, block: planOf(c)?.block || 0 });
     ses.skipped = ses.skipped.filter(id => id !== cid);
     saveSession(); state.pick = ""; state.pickNote = "";
-    toast(outcome === "loom" ? "Call logged. “Record and send a Loom” is now on today's list" : r.stage !== c.stage ? `Logged, moved to ${r.stage}` : "Call logged");
+    // an outcome like Not interested moves the stage too (Sean, 11/16): say what moved, and offer Undo
+    const name = c.person || c.company, moved = r.stage !== c.stage ? ` Moved ${name} from ${c.stage} to ${r.stage}.` : "";
+    toast(outcome === "loom" ? `Call logged. “Record and send a Loom” is now on today's list.${moved}` : moved ? `Call logged.${moved}` : "Call logged",
+      () => undoSessionCall(step));
     await load();
     if (r.after_call_step) openEmail(cid, r.after_call_step);
   } catch (e) { $("#logNext").disabled = false; }
@@ -1792,7 +1795,10 @@ async function openContact(id) {
       await flushStep(sid);
       const r = await api(`/api/steps/${sid}/done`, { method: "POST", body: { outcome: o, note } });
       state.open = new Set(r.after_call_step ? [r.after_call_step] : []);
-      toast(r.stage !== c.stage ? `${msg}, moved to ${r.stage}` : msg); refresh(id);
+      const name = c.person || c.company;
+      toast(r.stage !== c.stage ? `${msg}. Moved ${name} from ${c.stage} to ${r.stage}.` : msg,
+        async () => { await api(`/api/steps/${sid}/undo`, { method: "POST" }); toast(r.stage !== c.stage ? `Undone. ${name} is back in ${c.stage}` : "Undone"); refresh(id); });
+      refresh(id);
     };
     card.querySelectorAll("[data-act]").forEach(b => b.onclick = async e => {
       if (b.dataset.busy) return e.preventDefault();
