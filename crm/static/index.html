@@ -446,6 +446,7 @@ textarea.short { min-height: 72px; }
 .x:hover { background: var(--line); }
 .toast { position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity 200ms ease; z-index: 20; pointer-events: none; }
 .toast.on { opacity: 1; }
+.offline { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--line); background: var(--soft); color: var(--ink); font-size: var(--text-sm); }
 .toast.act.on { pointer-events: auto; }
 .tundo { margin-left: 12px; border: 0; background: none; color: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; padding: 4px 0; }
 .nextup { margin: 16px 0; } .nextup .stp { margin: 0; }
@@ -503,6 +504,7 @@ textarea.short { min-height: 72px; }
   <input class="search" id="q" placeholder="Search people, companies, emails" type="search">
   <button class="btn" id="add" type="button" aria-label="Add person"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="addt">Add person</span></button>
 </header>
+<p class="offline" id="offline" role="status" hidden>Can’t reach the CRM right now, so what you see may be out of date. It reconnects on its own.</p>
 <main id="main"><div class="skeleton" aria-label="Loading your pipeline"><i></i><i></i><i></i><i></i></div>
 <noscript><p class="empty">The CRM needs JavaScript turned on to show your pipeline.</p></noscript></main>
 <div class="scrim" id="scrim"></div>
@@ -550,19 +552,31 @@ const curWs = () => state.workspaces.find(w => w.slug === state.ws);
 const stageInfo = () => Object.fromEntries(state.board.stages.map(s => [s.name, s]));
 
 async function api(path, opts = {}) {
-  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined });
-  const data = await r.json();
-  if (!r.ok) { toast(data.error || "Something went wrong"); throw new Error(data.error); }
+  const write = opts.method && opts.method !== "GET";
+  let r;
+  try { r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined }); }
+  catch (e) {
+    offline(true);
+    toast(write ? "Couldn't reach the CRM, so that wasn't saved. It usually restarts within a minute, so try again then." : "Couldn't reach the CRM. Try again in a minute.", null, true);
+    throw e;
+  }
+  offline(false);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const why = data.error || (r.status >= 500 ? "The CRM hit an error" : "That didn't work");
+    toast(write ? `${why}. Nothing was changed, so you can try again.` : why, null, true); throw new Error(why);
+  }
   return data;
 }
-function toast(msg, undo) {
+// a quiet line under the header while the CRM can't be reached, so stale numbers don't pass for live ones
+function offline(on) { const el = $("#offline"); if (el) el.hidden = !on; }
+function toast(msg, undo, err) {
   const t = $("#toast"); t.textContent = msg; t.classList.toggle("act", !!undo);
   if (undo) {
     const b = document.createElement("button"); b.type = "button"; b.className = "tundo"; b.textContent = "Undo";
     b.onclick = async () => { t.classList.remove("on"); await undo(); }; t.append(" ", b);
   }
-  t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), undo ? 5000 : 2000);
+  t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), undo || err ? 6000 : 2000);
 }
 // asks in place, next to what's being changed, instead of a browser dialog; resolves true or false
 function askInline(anchor, msg, yes = "Yes") {
@@ -1211,6 +1225,11 @@ async function undoSessionCall(step) {
   } catch (e) {}
 }
 
+// a search that finds no one says so, instead of a page of zeros and empty boxes
+function noMatch(list) {
+  const q = $("#q").value.trim();
+  return q && !list.length ? `<div class="empty">No one matches “${esc(q)}”. Search looks at names, companies, emails and phone numbers. <button class="link" type="button" data-clearq>Clear search</button></div>` : "";
+}
 function renderOverview() {
   const st = stageInfo(), t = today(), stages = state.board.stages;
   const list = filtered(true, true);
@@ -1274,11 +1293,13 @@ function renderOverview() {
       }).join("")}</tbody></table></div>`;
   const sname = state.f.strategy === "none" ? "people with no strategy" : state.board.strategies.find(x => String(x.id) === state.f.strategy)?.name;
   const filteredNote = sname ? `<p class="filtered">Showing ${esc(sname)} only, so every number below counts ${list.length} of ${state.board.contacts.length} people.</p>` : "";
+  if (noMatch(list)) { $("#main").innerHTML = filterBar({ stage: false, due: false }, 0) + noMatch(list); return; }
   $("#main").innerHTML = filterBar({ stage: false, due: false }, list.length) + filteredNote + strip + todaySec + (calls.length ? callSec + warmSec : warmSec + callSec) + emailSec + otherSec + strat;
 }
 
 function renderBoard() {
   const list = filtered(true, false);
+  if (noMatch(list)) { $("#main").innerHTML = filterBar({ stage: false }, 0) + noMatch(list); return; }
   $("#main").innerHTML = filterBar({ stage: false }, list.length) + `<div class="board">${state.board.stages.map(s => {
     const cs = list.filter(c => c.stage === s.name);
     return `<div class="col ${s.kind === "closed" ? "closed" : ""}"><div class="colhead"><h3>${esc(s.name)}</h3><span class="n">${cs.length}</span></div>
@@ -1695,7 +1716,12 @@ async function openContact(id) {
       state.open = new Set(r.after_call_step ? [r.after_call_step] : []);
       toast(r.stage !== c.stage ? `${msg}, moved to ${r.stage}` : msg); refresh(id);
     };
-    card.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
+    card.querySelectorAll("[data-act]").forEach(b => b.onclick = async e => {
+      if (b.dataset.busy) return e.preventDefault();
+      b.dataset.busy = "1";
+      try { await stepAct(b); } catch (err) {} finally { delete b.dataset.busy; }
+    });
+    async function stepAct(b) {
       const act = b.dataset.act;
       if (act === "outlook") {  // the Outlook app on the Mac; on the phone, the phone's mail app
         await flushStep(sid);
@@ -1716,7 +1742,7 @@ async function openContact(id) {
       else if (act === "skip") { if (!await askInline(b.parentElement, "Skip this step? It moves to done as skipped and the next one becomes current.", "Skip step")) return;
         await flushStep(sid); await api(`/api/steps/${sid}/skip`, { method: "POST" }); state.open.delete(sid); toast("Skipped"); refresh(id); }
       else if (act === "remove") { if (!await askInline(b.parentElement, "Remove this planned step?", "Remove step")) return; pendingSaves.delete(sid); await api(`/api/steps/${sid}`, { method: "DELETE" }); toast("Removed"); refresh(id); }
-    });
+    }
   });
 }
 async function refresh(id) { await flushAll(); await load(); openContact(id); }
@@ -1820,6 +1846,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (e.target.id === "retry") return load();
+  if (e.target.closest("[data-clearq]")) { $("#q").value = ""; return load(); }
   if (e.target.id === "clearF") { state.f = noFilters(); savePrefs(); return render(); }
   const th = e.target.closest("th[data-sort]");
   if (th) { const k = th.dataset.sort; state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: k === "updated" ? -1 : 1 }; savePrefs(); return render(); }
@@ -1904,7 +1931,7 @@ async function autoRefresh() {
     return;
   }
   const q = encodeURIComponent($("#q").value.trim());
-  let b; try { const r = await fetch(`/api/board?workspace=${state.ws}&q=${q}`); if (!r.ok) return; b = await r.json(); } catch (e) { return; }
+  let b; try { const r = await fetch(`/api/board?workspace=${state.ws}&q=${q}`); if (!r.ok) return; b = await r.json(); offline(false); } catch (e) { offline(true); return; }
   const s = JSON.stringify(b);
   if (s === lastBoard || busy()) return;
   state.board = b; lastBoard = s;
@@ -1913,6 +1940,7 @@ async function autoRefresh() {
   const d = $("#drawer");
   if (state.openFor && d.classList.contains("open") && d.querySelector("#hold") && !$("#saveDetails") && !$("#summary")?.value.trim()) openContact(state.openFor);
 }
+window.addEventListener("beforeunload", e => { if (pendingSaves.size) { flushAll(); e.preventDefault(); e.returnValue = ""; } });
 window.addEventListener("focus", autoRefresh);
 document.addEventListener("visibilitychange", autoRefresh);
 setInterval(autoRefresh, 30000);
