@@ -276,6 +276,9 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .agrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px 32px; }
 .summary + .summary { margin-top: 16px; }
 .mhint { margin: 0; padding: 0 20px 16px; }
+.kpi .khint { margin-top: 4px; max-width: 32ch; }
+.kpi.thin b, td.thin { color: var(--muted); }
+.wbar.rate { background: var(--soft); }
 .adef { margin-top: 24px; font-size: var(--text-sm); color: var(--muted); }
 .adef summary { cursor: pointer; color: var(--ink); }
 .adef ul { margin: 8px 0 0; padding-left: 20px; }
@@ -873,6 +876,8 @@ async function renderOutreach(o) {
 
 // ---- analytics: how the outreach is doing, worked out live by the server from every logged touch ---------
 const pct = r => r == null ? "n/a" : `${r}%`;
+const THIN = 10;  // a rate from fewer than 10 people is shown grey, as a hint rather than a fact
+const rateCell = (r, base) => `<td class="num${base < THIN ? " thin" : ""}"${base < THIN ? ` title="Only ${base}, too few to trust"` : ""}>${pct(r)}</td>`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 async function renderAnalytics(a) {
   if (!a) {
@@ -884,12 +889,16 @@ async function renderAnalytics(a) {
     state.analytics = a; state.analyticsKey = key; state.analyticsWs = state.ws;
   }
   const e = a.emails, r = a.response, k = a.calls;
-  const kpi = (n, label, sub, cls = "") => `<div class="kpi ${cls}"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  // base: how many people a rate is out of; under THIN the number goes grey and says so
+  const kpi = (n, label, sub, cls = "", base = null, hint = "") => {
+    const thin = base != null && base < THIN;
+    return `<div class="kpi ${thin ? "thin" : cls}"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}${thin ? `. Only ${base}, too few to trust yet` : ""}</small>` : ""}${hint ? `<small class="khint">${hint}</small>` : ""}</div>`;
+  };
   const kpis = [
     kpi(a.contacted, "Contacted", "people emailed or called"),
     kpi(e.total, "Emails sent", `${e.first} first emails, ${e.bumps} bumps, ${e.yours} your replies`),
-    kpi(pct(r.rate), "Response rate", `${plural(r.n, "person", "people")} replied (${plural(r.replies, "reply", "replies")}) of ${r.base} emailed`),
-    kpi(pct(k.rate), "Calls connected", `${k.connected} of ${k.attempts} calls to ${k.people} people, ${plural(k.voicemails, "voicemail", "voicemails")}`),
+    kpi(pct(r.rate), "Response rate", `${plural(r.n, "person", "people")} replied (${plural(r.replies, "reply", "replies")}) of ${r.base} emailed`, "", r.base),
+    kpi(pct(k.rate), "Calls connected", `${k.connected} of ${k.attempts} calls to ${k.people} people, ${plural(k.voicemails, "voicemail", "voicemails")}`, "", k.attempts),
     kpi(a.first_convo.n, "1st conversation", `${pct(a.first_convo.rate)} of contacted`),
     kpi(a.second_convo.n, "2nd conversation", `${pct(a.second_convo.rate)} of 1st conversations`),
     kpi(a.warm.n, "Warm now", `${pct(a.warm.rate)} of contacted`, `hotn${a.warm.n ? " has" : ""}`),
@@ -901,36 +910,42 @@ async function renderAnalytics(a) {
   const dealList = cyc.deals.map(d => `${d.person} (${d.company}): ${plural(d.days, "day", "days")}`).join(", ");
   const cycSub = !cyc.n ? "no closed deals yet" : cyc.n < 3 ? `${plural(cyc.n, "deal", "deals")} so far: ${esc(dealList)}` : `median of ${cyc.n} deals`;
   const money = [
-    kpi(pct(m.positive.rate), "Positive reply rate", `${plural(m.positive.n, "person", "people")} replied and turned warm, vs ${pct(m.positive.raw_rate)} who replied at all`, "hotn has"),
-    kpi(pct(m.meeting.rate), "Meeting rate", `${m.meeting.n} of ${m.meeting.base} good conversations reached a meeting`),
-    kpi(pct(m.close.rate), "Close rate", `${m.close.n} of ${plural(m.close.base, "meeting", "meetings")} became a client`, `paid${m.close.n ? " has" : ""}`),
-    `<div class="kpi" title="${esc(dealList)}"><b>${cyc.n ? plural(cyc.median_days, "day", "days") : "n/a"}</b><span>Sales cycle</span><small>${cycSub}</small></div>`,
+    kpi(pct(m.positive.rate), "Positive reply rate", `${m.positive.n} of ${m.positive.base} emailed, vs ${pct(m.positive.raw_rate)} who replied at all`, "hotn has", m.positive.base,
+      "Replies that turned into a warm lead."),
+    kpi(pct(m.meeting.rate), "Meeting rate", `${m.meeting.n} of ${m.meeting.base} good conversations`, "", m.meeting.base,
+      "Positive replies, or calls that ended interested, call back, lukewarm or Loom, that reached a meeting."),
+    kpi(pct(m.close.rate), "Close rate", `${m.close.n} of ${plural(m.close.base, "meeting", "meetings")}`, `paid${m.close.n ? " has" : ""}`, m.close.base,
+      "Meetings that became a client."),
+    `<div class="kpi${cyc.n < 3 ? " thin" : ""}" title="${esc(dealList)}"><b>${cyc.n ? plural(cyc.median_days, "day", "days") : "n/a"}</b><span>Sales cycle</span><small>${cycSub}</small>
+      <small class="khint">Days from your first email or call to becoming a client.</small></div>`,
   ].join("");
   const top = a.funnel[0].n || 1, cls = { Warm: "hotr", Meeting: "hotr", "Active client": "paidr" };
   const funnel = a.funnel.map(f => `<div class="afrow ${cls[f.name] || ""}"><span>${esc(f.name)}</span>
     <span class="afbar" aria-hidden="true"><i style="transform: scaleX(${Math.max(f.n / top, f.n ? 0.004 : 0)})"></i></span>
     <b>${f.n}</b><span class="muted">${f.of ? `${pct(f.rate)} of ${esc(f.of.toLowerCase())}` : ""}</span></div>`).join("");
   const wmax = Math.max(1, ...a.weeks.map(w => w.first));
-  const weeks = [...a.weeks].reverse().map(w => `<tr><td>Week of ${fmt(w.week)}</td>
+  const weeks = [...a.weeks].reverse().map(w => `<tr><td>${fmt(w.week)}</td>
     <td class="num"><span class="wbar" style="width: ${Math.round(48 * w.first / wmax)}px" aria-hidden="true"></span>${w.first}</td>
-    <td class="num">${w.bumps}</td><td class="num">${w.calls}</td><td class="num">${w.replies}</td></tr>`).join("");
-  const subjects = a.subjects.map(x => `<tr><td>${esc(x.subject)}</td><td class="num">${x.people}</td><td class="num">${x.replied}</td>
-    <td class="num">${pct(x.rate)}</td><td class="num">${x.positive}</td><td class="num hide-sm">${pct(x.positive_rate)}</td>
+    <td class="num">${w.bumps}</td><td class="num">${w.calls}</td><td class="num">${w.replies}</td>
+    <td class="num${w.cohort < THIN ? " thin" : ""}"><span class="wbar rate" style="width: ${Math.round(4 * (w.cohort_rate || 0))}px" aria-hidden="true"></span>${w.cohort ? pct(w.cohort_rate) : "n/a"}</td></tr>`).join("");
+  const ranked = [...a.subjects].sort((p, q) => q.closed - p.closed || q.meetings - p.meetings || q.positive - p.positive || q.warm - p.warm || q.people - p.people);
+  const subjects = ranked.map(x => `<tr><td>${esc(x.subject)}</td><td class="num">${x.people}</td><td class="num">${x.replied}</td>
+    ${rateCell(x.rate, x.people)}<td class="num">${x.positive}</td>${rateCell(x.positive_rate, x.people).replace('class="num', 'class="num hide-sm')}
     <td class="num">${x.meetings}</td><td class="num">${x.closed}</td><td class="num hide-sm">${x.warm}</td></tr>`).join("");
   const ch = a.channel, chRow = (name, g) => `<tr><td>${name}</td><td class="num">${g.people}</td><td class="num">${g.replied}</td>
-    <td class="num">${pct(g.reply_rate)}</td><td class="num">${g.warm}</td><td class="num">${pct(g.warm_rate)}</td></tr>`;
+    ${rateCell(g.reply_rate, g.people)}<td class="num">${g.warm}</td>${rateCell(g.warm_rate, g.people)}</tr>`;
   const t = a.timing, tTotal = t.first_email + t.after_bump;
   $("#main").innerHTML = `<div class="section"><div class="head"><h2>Analytics</h2><div class="grow"></div><span class="muted">Live from the CRM, as of ${fmt(a.as_of)}</span></div>
     <div class="summary"><div class="kpis">${money}</div>
-      <p class="muted note mhint">Positive reply rate: replies that turned into a warm lead. Meeting rate: good conversations (positive replies, or calls that ended interested, call back, lukewarm or Loom) that reached a meeting stage. Close rate: meetings that became a client. Sales cycle: days from your first email or call to becoming a client.</p></div>
+      <p class="muted note mhint">Grey numbers come from fewer than ${THIN} people, so treat them as early signs, not results.</p></div>
     <div class="summary"><div class="kpis">${kpis}</div></div></div>
     <div class="section"><div class="head"><h2>Funnel</h2></div><div class="summary"><div class="afun">${funnel}</div></div>
-      <p class="muted note">Bars are against everyone contacted. Warm comes from 1st conversations, since a warm lead doesn't always need a second one first.</p></div>
+      <p class="muted note">Delivered is everyone contacted minus bounced addresses. Bars are against everyone contacted. Warm comes from 1st conversations, since a warm lead doesn't always need a second one first.</p></div>
     <div class="section agrid">
       <div><div class="head"><h2>Weekly activity</h2></div>
-        <table class="stable"><thead><tr><th>Week</th><th class="num">First emails</th><th class="num">Bumps</th><th class="num">Calls</th><th class="num">Replies</th></tr></thead>
-        <tbody>${weeks || `<tr><td colspan="5" class="empty">Nothing logged yet.</td></tr>`}</tbody></table>
-        <p class="muted note">Weeks start Monday. Calls include voicemails; replies leave out bounces and out of office notes.</p></div>
+        <table class="stable"><thead><tr><th>Week of</th><th class="num">First emails</th><th class="num">Bumps</th><th class="num">Calls</th><th class="num">Replies</th><th class="num">Reply rate</th></tr></thead>
+        <tbody>${weeks || `<tr><td colspan="6" class="empty">Nothing logged yet.</td></tr>`}</tbody></table>
+        <p class="muted note">Weeks start Monday. Calls include voicemails; replies leave out bounces and out of office notes. Reply rate is how many of that week's first emails ever got a real reply, so recent weeks still climb.</p></div>
       <div><div class="head"><h2>When people reply</h2></div>
         <div class="summary"><div class="kpis">
           ${kpi(t.first_email, "To the first email", tTotal ? `${Math.round(100 * t.first_email / tTotal)}% of people who replied` : "")}
@@ -942,12 +957,13 @@ async function renderAnalytics(a) {
         <tbody>${chRow("Email only", ch.email_only)}${chRow("Emailed and called", ch.email_and_call)}${chRow("Called only", ch.call_only)}</tbody></table>
         <p class="muted note">Emailed groups leave out bounced addresses.</p></div>
     </div>
-    <div class="section"><div class="head"><h2>By first email subject</h2></div>
+    <div class="section"><div class="head"><h2>By first email subject</h2><div class="grow"></div><span class="muted">Ranked by clients, meetings, then positive replies</span></div>
       <table class="stable"><thead><tr><th>Subject</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply %</th><th class="num">Positive</th><th class="num hide-sm">Positive %</th>
       <th class="num">Meetings</th><th class="num">Clients</th><th class="num hide-sm">Warm now</th></tr></thead>
       <tbody>${subjects || `<tr><td colspan="9" class="empty">No first emails logged yet.</td></tr>`}</tbody></table>
       <p class="muted note">People leaves out bounced addresses. Batches 1 to 4 were logged without a subject, so theirs comes from the bump in the same thread or the Outreach Runbook. Batch 3 was an A/B test whose split wasn't saved for everyone.</p>
       <details class="adef"><summary>How these are counted</summary><ul>
+        <li>Delivered: contacted, and the email didn't bounce.</li>
         <li>A real reply is any reply that isn't a bounce, an auto-reply or an out of office note.</li>
         <li>A call connected when you talked to them: logged as Talked, or Called: Interested, Not Interested or Call Back. Ghosted and no answer didn't.</li>
         <li>1st conversation: a real reply or a connected call. 2nd conversation: that happened again on a different day, a meeting included.</li>

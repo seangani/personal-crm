@@ -1468,6 +1468,12 @@ def analytics(con, workspace):
     d = sorted(x for x in timing.pop("days") if x >= 0)
     timing["median_days"] = (d[len(d) // 2] if len(d) % 2 else (d[len(d) // 2 - 1] + d[len(d) // 2]) / 2) if d else None
 
+    def cohort(w):
+        """How the people first emailed that week did: replied (real reply) and positive, ever."""
+        ids = {c for c, (d, *_x) in first.items() if week(d) == w} - bounced
+        return {"cohort": len(ids), "cohort_replied": len(ids & replied), "cohort_rate": rate(len(ids & replied), len(ids)),
+                "cohort_positive": len(ids & positive)}
+
     def group(ids):
         return {"people": len(ids), "replied": len(ids & replied), "reply_rate": rate(len(ids & replied), len(ids)),
                 "warm": len(ids & hot), "warm_rate": rate(len(ids & hot), len(ids))}
@@ -1488,7 +1494,7 @@ def analytics(con, workspace):
         "clients": stat(client & contacted, contacted), "said_no": stat(said_no & contacted, contacted),
         "bounced": len(bounced & contacted),
         "funnel": funnel,
-        "weeks": [{"week": w} | v for w, v in sorted(weeks.items())],
+        "weeks": [{"week": w} | v | cohort(w) for w, v in sorted(weeks.items())],
         "subjects": subjects, "timing": timing, "channel": channel,
     }
 
