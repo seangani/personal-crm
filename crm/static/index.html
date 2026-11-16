@@ -517,7 +517,7 @@ const ICONS = {
 };
 const icon = n => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ICONS.task}</svg>`;
 const TYPES = { email: "Email", call: "Call", text: "Text", linkedin: "LinkedIn", meeting: "Meeting", task: "To do", close: "Close if no reply" };
-const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"], ["stuck", "Stuck over 4 days"]];
+const DUE = [["", "Any due date"], ["now", "Due now"], ["week", "Due within 7 days"], ["none", "No next step"], ["stuck", "Warm leads stuck over 4 days"], ["stuckall", "Anyone stuck over 4 days"]];
 const noFilters = () => ({ stage: "", due: "", strategy: "", custom: {} });
 
 let state = { ws: null, view: "overview", board: null, workspaces: [], f: noFilters(), sort: { key: "updated", dir: -1 },
@@ -579,7 +579,8 @@ function filtered(skipStage, skipDue) {
       if (f.due === "now" && !(c.next_step && d && d <= t)) return false;
       if (f.due === "week" && !(c.next_step && d && d <= week)) return false;
       if (f.due === "none" && c.next_step) return false;
-      if (f.due === "stuck" && !c.stale_days) return false;
+      if (f.due === "stuck" && !isStuck(c)) return false;
+      if (f.due === "stuckall" && !c.stale_days) return false;
     }
     return true;
   });
@@ -661,7 +662,9 @@ function stageClass(name) {
 }
 function stagePill(c) { return `<span class="pill ${stageClass(c.stage)}">${esc(c.stage)}</span>`; }
 // Sean's rule: nobody sits in one stage over 4 days. The server works it out (won, closed and held people never get it)
-const stuckTag = (c, long) => c.stale_days ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
+// the warning shows on warm leads only (Sean, 11/15): on cold stages it flagged 363 of 442 people and stopped meaning anything
+const isStuck = c => !!c.stale_days && !!stageInfo()[c.stage]?.hot;
+const stuckTag = (c, long) => isStuck(c) ? `<span class="pill stuck" title="${esc(`In ${c.stage} for ${c.stale_days} days. Move them on, or set a hold date in their panel.`)}">${icon("alert")}${long
   ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
 // the outcome buttons; Make Loom took Call back later's place (Sean, 11/13), which still names older log entries
 const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
@@ -1083,8 +1086,9 @@ function callSession(calls, plan) {
     const left = calls.filter(x => planOf(x)?.block === p.block).length, done = ses.log.filter(x => x.block === p.block).length;
     return `<div class="blockhd"><b>Block ${p.block}${p.window ? `, ${esc(p.window)}` : ""}</b><span class="muted">${done} of ${left + done} logged</span></div>`;
   })() : "";
-  const others = plan && plan.others ? `<p class="morecalls"><button class="link" type="button" data-allcalls>${state.allCalls ? "Hide" : "Show"} the ${plan.others} other overdue call${plan.others === 1 ? "" : "s"}</button></p>` : "";
-  const now = !c ? `<div class="now"><h3>${icon("done")}${plan ? "That's every call in today's plan" : ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
+  const others = plan?.others ? `<p class="morecalls"><span class="muted">Backlog: ${plan.others} older overdue call${plan.others === 1 ? "" : "s"}.</span>
+    <button class="link" type="button" data-allcalls>${state.allCalls ? "Hide the backlog" : "Work the backlog too"}</button></p>` : "";
+  const now = !c ? `<div class="now"><h3>${icon("done")}${plan?.plan ? "That's every call in today's plan" : ses.log.length ? "That's every call due today" : "No calls due today"}</h3>
       <p class="muted">${ses.log.length ? `${ses.log.length} logged, ${warmN} warm. The warm ones are in the panel above with their next outreach.` : "New ones show up here on the day they're due."}</p></div>` : `
     <div class="now" data-cid="${c.id}" data-step="${c.current.id}">
       <div class="nowtop" data-id="${c.id}"><h3>${aiMark(c)}<button class="link nmlink" type="button" data-open="${c.id}">${esc(c.person || c.company)}</button></h3>
@@ -1101,12 +1105,12 @@ function callSession(calls, plan) {
         <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
     </div>`;
   const next = queue.slice(1, 6).map(x => `<li data-open="${x.id}">${aiMark(x)}<span class="nm"><b>${esc(x.person || x.company)}</b>${x.person ? `<span class="co">${esc(x.company)}</span>` : ""}</span>
-    <span class="date">${esc(placeText(x).replace(" (by area code)", ""))}</span></li>`).join("") || `<li class="muted">Nothing after this one.</li>`;
+    <span class="date">${esc(placeText(x).replace(" (by area code)", ""))}</span></li>`).join("") || `<li class="muted">${c ? "Nothing after this one." : "Nothing queued."}</li>`;
   const log = ses.log.slice().reverse().map(x => `<li${x.cid ? ` data-id="${x.cid}"` : ""}>${x.cid ? `<button class="link nmlink" type="button" data-open="${x.cid}">${esc(x.name)}</button>` : `<b>${esc(x.name)}</b>`}<span class="lacts">${x.email ? `<button class="link" type="button" data-email="${x.cid}" data-sid="${x.email}">Email</button>` : ""}<button class="link" type="button" data-undo="${x.step}">Undo</button></span>
     <span class="o${WARM_OUT.has(x.outcome) ? " warmo" : ""}">${esc(outcomeName(x.outcome))}${x.note ? `: ${esc(x.note)}` : ""}${x.moved ? `. Now ${esc(x.moved)}` : ""}</span></li>`).join("")
     || `<li class="muted">Each call you log shows up here, with undo.</li>`;
-  return `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
-      <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>
+  return `${total ? `<div class="progress"><span>${ses.log.length} of ${total} logged</span><div class="track" aria-hidden="true"><i style="transform:scaleX(${total ? ses.log.length / total : 0})"></i></div>
+      <span class="muted">${warmN ? `${warmN} warm so far` : ""}</span></div>` : ""}
     ${blockHead}<div class="session"><div>${now}${others}</div><div class="side"><h3>Up next</h3><ol class="next-list">${next}</ol><h3>Logged today</h3><ul class="log-list" tabindex="0" aria-label="Calls logged today">${log}</ul></div></div>`;
 }
 const WARM_OUT = new Set(["interested", "call_back", "loom", "talked", "maybe"]);
@@ -1151,7 +1155,7 @@ function renderOverview() {
   const warm = list.filter(c => st[c.stage]?.hot || kind(c) === "won");
   const has = n => n ? " has" : "";
   const paid = list.filter(c => st[c.stage]?.paid).length, dead = list.filter(c => kind(c) === "closed").length;
-  const interested = list.filter(c => afterNames.has(c.stage)).length, stuck = list.filter(c => c.stale_days).length;
+  const interested = list.filter(c => afterNames.has(c.stage)).length, stuck = list.filter(isStuck).length;
   const dueNow = c => !done(c) && c.current?.due && c.current.due <= t;
   // calls and emails are the cold outreach; warm people live in the warm panel with their next outreach
   const cold = c => dueNow(c) && !st[c.stage]?.hot;
@@ -1162,19 +1166,22 @@ function renderOverview() {
     .sort((a, b) => planOf(a).block - planOf(b).block || planOf(a).n - planOf(b).n);
   const planDay = plan.length > 0 || loadSession().log.some(x => x.block);
   const planIds = new Set(plan.map(c => c.id)), rest = coldCalls.filter(c => !planIds.has(c.id));
-  const calls = planDay ? [...plan, ...(state.allCalls ? rest : [])] : coldCalls;
+  // today = the plan, or calls due today; the backlog = older overdue calls, one click away instead of 300+ in the count
+  const todays = planDay ? plan : coldCalls.filter(c => c.current.due === t);
+  const backlog = planDay ? rest : coldCalls.filter(c => c.current.due < t);
+  const calls = [...todays, ...(state.allCalls ? backlog : [])];
   const emails = byDue(list.filter(c => cold(c) && c.current.type === "email"));
   const other = byDue(list.filter(c => cold(c) && !["call", "email"].includes(c.current.type)));
   const shownEmails = state.allEmails ? emails : emails.slice(0, 12), inBatch = emails.filter(c => c.ai_state === "batch").length;
 
   const strip = `<p class="pulse"><span class="hotn${has(warm.length)}"><b>${warm.length}</b> warm</span>, <b>${interested}</b> interested or further,
     <span class="paidn${has(paid)}"><b>${paid}</b> at a paid stage</span>, <b>${dead}</b> dead.
-    ${stuck ? `<button class="link" type="button" data-stuckgo>${stuck} stuck over 4 days</button>` : ""}</p>`;
+    ${stuck ? `<button class="link" type="button" data-stuckgo>${stuck} warm ${stuck === 1 ? "lead" : "leads"} stuck over 4 days</button>` : ""}</p>`;
   const warmSec = `<div class="section"><div class="head"><h2>Warm leads</h2><div class="grow"></div>${dotLegend}${aiLegend}</div>${warmPanel(warm, list)}</div>`;
   const sat = weekendOf(t), sun = new Date(new Date(sat + "T12:00").getTime() + 864e5).toLocaleDateString("en-CA");
   const wkCalls = list.filter(c => !done(c) && c.current?.type === "call" && c.current.weekend && c.current.due > t && c.current.due <= sun).length;
   const wkNote = wkCalls ? `<span class="muted">${wkCalls} weekend ${wkCalls === 1 ? "call" : "calls"} for Sat ${fmt(sat)}</span>` : "";
-  const callSec = `<div class="section" id="calls"><div class="head"><h2>Calls today</h2><span class="n">${calls.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, planDay ? { others: rest.length } : null)}</div>`;
+  const callSec = `<div class="section" id="calls"><div class="head"><h2>${planDay ? "Today's plan" : "Calls today"}</h2><span class="n">${todays.length}</span><div class="grow"></div>${wkNote}</div>${callSession(calls, { others: backlog.length, plan: planDay })}</div>`;
   const emailSec = `<div class="section"><div class="head"><h2>Emails to send</h2><span class="n">${emails.length}</span></div>
     ${emails.length ? `${inBatch ? `<p class="muted note">${inBatch} of these ${inBatch === 1 ? "is" : "are"} already in the next batch, so there's nothing to do by hand for ${inBatch === 1 ? "it" : "them"}.</p>` : ""}
       <div class="rows">${shownEmails.map(row).join("")}</div>
