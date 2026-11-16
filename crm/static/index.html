@@ -150,7 +150,8 @@ h2 { font-size: var(--text-lg); font-weight: 600; margin: 24px 0 8px; display: f
 .seq .what .muted { font-size: var(--text-sm); }
 .seq .counts { display: flex; gap: 16px; font-size: var(--text-sm); color: var(--muted); }
 .seq .counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.cold { color: var(--warn); font-weight: 600; }
+/* "last contact 10 days ago" sits on most warm rows, so it's weight, not amber; amber is kept for a missing next step */
+.cold { color: var(--ink); font-weight: 600; }
 .filtered { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--ink); font-size: var(--text-sm); }
 .pulse { margin: 0 0 24px; color: var(--muted); font-size: var(--text-sm); }
 .pulse b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -682,7 +683,8 @@ function duePill(d, hasStep = true, weekend = false) {
     if (d >= sat && d <= t) return `<span class="date today">This weekend</span>`;
     if (d > t) return `<span class="date">Weekend, ${dayName(d)} ${fmt(d)}</span>`;
   }
-  if (d < t) return `<span class="pill late">Overdue since ${fmt(d)}</span>`;
+  // most of the pipeline is overdue at any time, so this is bold text, not an amber pill on every card (DESIGN.md Scarcity rule)
+  if (d < t) return `<span class="date late">Overdue since ${fmt(d)}</span>`;
   if (d === t) return `<span class="date today">Today</span>`;
   return `<span class="date">${fmt(d)}</span>`;
 }
@@ -1081,7 +1083,7 @@ const siteLink = c => siteOf(c) ? `<a class="place site" href="${esc(siteOf(c))}
 // a warm lead: where they stand, the last time you talked and what was said, their note, and the next outreach
 function warmRow(c, extra = "", dim = false) {
   const said = c.last_said && !/^Strategy:/.test(c.last_said) && !(c.last_reply && /^replied/i.test(c.last_said)) ? c.last_said : "";
-  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${c.current.due && c.current.due < today() && !c.current.weekend ? `<span class="date late">Overdue since ${fmt(c.current.due)}</span>` : duePill(c.current.due, true, c.current.weekend)}</span>`
+  const next = c.current ? `<span class="nxo">${icon(c.current.type)}<span>${esc(c.current.label)}</span>${duePill(c.current.due, true, c.current.weekend)}</span>`
     : `<span class="pill late">Next outreach not scheduled</span>`;
   return `<div class="wrow${dim ? " held" : ""}" data-id="${c.id}">${whoCell(c)}<div class="stgd">${stagePill(c)}${stuckTag(c)}${dots(c)}</div><div class="wnext">${next}</div>
     <div class="wmeta"><span>Last contact ${contactedText(c)}${said ? `, ${esc(said)}` : ""}</span>${replyPeek(c)}${c.notes ? `<span class="ask">Their note: ${esc(c.notes)}</span>` : ""}${extra}</div></div>`;
