@@ -252,7 +252,8 @@ def edit_step(step_id: int, type: str = "", title: str = "", due: str = "", subj
 @mcp.tool()
 def complete_step(step_id: int, outcome: str = "", note: str = "") -> dict:
     """Mark a step done and log it. Calls take outcome no_answer, voicemail, gatekeeper, call_back, loom (adds a Loom to do), interested,
-    rejected, talked or maybe; each moves the stage to match (only forward), rejected closes them as not interested,
+    rejected, not_fit, do_not_contact, talked or maybe; each moves the stage to match (only forward), rejected and not_fit
+    close them as Not interested (not_fit logs "Talked, not a fit"), do_not_contact moves them to Do not contact,
     maybe (lukewarm, wants an email) also adds the after-call email step, due today.
     A close step moves them to a closed stage with its reason."""
     return _slim(_with(db.complete_step, step_id, outcome, note, "claude"))

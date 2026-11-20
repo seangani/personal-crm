@@ -110,6 +110,9 @@ CALL_OUTCOMES = {
     "call_back": ("call", "Talked, asked for a call back", "Call back"),
     "interested": ("call", "Talked, interested", "Interested"),
     "rejected": ("call", "Talked, not interested", "@closed"),  # @closed = the workspace's first closed stage
+    # added 11/20 next to rejected (keys stay backward compatible): both close them, which skips every planned step
+    "not_fit": ("call", "Talked, not a fit", "@closed"),  # wrong type of business; the summary keeps it countable
+    "do_not_contact": ("call", "Talked, asked not to be contacted", "Do not contact"),
     "talked": ("call", "Talked", None),
     "maybe": ("call", "Talked, lukewarm, wants an email", None),  # also adds the after-call email, due today
     "loom": ("call", "Talked, sending a Loom video", None),  # also adds a "Record and send a Loom" to do, due today
@@ -754,7 +757,7 @@ def skip_step(con, step_id, source="web"):
 
 def complete_step(con, step_id, outcome="", note="", source="web", at=None):
     """Do a step: mark it done and log what happened on the timeline.
-    Calls take an outcome (no_answer, voicemail, talked). A close step moves the contact to the first
+    Calls take an outcome (no_answer, voicemail, talked, rejected, not_fit, do_not_contact, ...). A close step moves the contact to the first
     closed stage (or the stage named in `outcome`) with the step's reason."""
     s = _get_step(con, step_id)
     cid, at = s["contact_id"], at or now()

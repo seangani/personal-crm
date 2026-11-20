@@ -452,6 +452,10 @@ textarea.short { min-height: 72px; }
 .chip { min-height: 40px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: left; cursor: pointer; font-size: var(--text-sm); }
 .chip:hover { border-color: var(--accent); }
 .chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); font-weight: 600; }
+.chips.nos { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.chip.no { color: var(--dead); } .chip.no:hover { border-color: var(--dead); }
+.chip.no[aria-pressed="true"] { background: var(--dead-bg); border-color: var(--dead); color: var(--dead); }
+.chip.no .hk { color: var(--dead); opacity: 1; }
 .chip .hk { display: inline-block; min-width: 1.4em; margin-right: 4px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
 @media (hover: none) { .chip .hk { display: none; } }
 .saved { font-size: var(--text-xs); color: var(--muted); margin-left: auto; }
@@ -765,7 +769,16 @@ const stuckTag = (c, long) => isStuck(c) ? `<span class="pill stuck" title="${es
   ? `Stuck ${c.stale_days} days in ${esc(c.stage)}` : `${c.stale_days} days in stage`}</span>` : "";
 // the outcome buttons; Make Loom took Call back later's place (Sean, 11/13), which still names older log entries
 const CALL_LOG = [["no_answer", "No answer"], ["voicemail", "Left a voicemail"], ["gatekeeper", "Reached gatekeeper"],
-  ["loom", "Make Loom"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"]];
+  ["loom", "Make Loom"], ["interested", "Interested"], ["maybe", "Lukewarm, wants an email"], ["rejected", "Not interested"], ["talked", "Talked, other"],
+  ["not_fit", "Not a fit"], ["do_not_contact", "Do not contact"]];
+// the three ways a call ends a lead, grouped in Stop Red (Sean, 11/20). Keys stay put: 1 to 8 as before, then 9 and 0
+const NO_OUT = ["rejected", "not_fit", "do_not_contact"];
+const OUT_KEY = { no_answer: "1", voicemail: "2", gatekeeper: "3", loom: "4", interested: "5", maybe: "6", rejected: "7", talked: "8", not_fit: "9", do_not_contact: "0" };
+const OUT_TIP = { rejected: "Closes them as Not interested", not_fit: "Wrong type of business. Closes them as Not interested, logged as not a fit",
+  do_not_contact: "They asked not to be contacted again. Moves them to Do not contact" };
+// two rows of outcome chips: the usual ones, then the "no" group; chip(value, label) draws one button
+const outcomeChips = (labelAttr, chip) => `<div class="chips" role="group" ${labelAttr}>${CALL_LOG.filter(([v]) => !NO_OUT.includes(v)).map(([v, l]) => chip(v, l)).join("")}</div>
+  <div class="chips nos" role="group" aria-label="Ends the lead">${NO_OUT.map(v => chip(v, outcomeName(v))).join("")}</div>`;
 const outcomeName = o => (CALL_LOG.find(y => y[0] === o) || { call_back: [o, "Call back later"] }[o])?.[1] || o;
 function row(c) {
   return `<div class="ov-row" data-id="${c.id}">
@@ -1210,8 +1223,8 @@ function callSession(calls, plan) {
       ${c.current.body ? `<div class="points">${esc(c.current.body)}</div>` : ""}
       ${c.last_touch ? `<p class="seeconvo"><button class="link" type="button" data-convofor="${c.id}">See the emails you sent and what they wrote back</button></p>` : ""}
       <div class="lbl" id="whl">What happened?</div>
-      <div class="chips" role="group" aria-labelledby="whl">${CALL_LOG.map(([v, t], i) =>
-        `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}" type="button" data-pick="${v}" aria-pressed="${state.pick === v}" aria-keyshortcuts="${i + 1}"><span class="hk" aria-hidden="true">${i + 1}</span>${t}</button>`).join("")}</div>
+      ${outcomeChips('aria-labelledby="whl"', (v, t) =>
+        `<button class="chip${WARM_OUT.has(v) ? " warmc" : ""}${NO_OUT.includes(v) ? " no" : ""}" type="button" data-pick="${v}" data-hk="${OUT_KEY[v]}" aria-pressed="${state.pick === v}" aria-keyshortcuts="${OUT_KEY[v]}"${OUT_TIP[v] ? ` title="${esc(OUT_TIP[v])}"` : ""}><span class="hk" aria-hidden="true">${OUT_KEY[v]}</span>${t}</button>`)}
       <label for="callNote">Note (optional)</label><input id="callNote" class="callnote" placeholder="Wants a demo Tuesday" enterkeyhint="done" value="${esc(state.pickNote || "")}">
       <div class="go"><button class="btn primary" id="logNext" type="button"${state.pick ? "" : " disabled"}>Log and next</button>
         <button class="btn" id="skipCall" type="button">Skip for now</button><span class="muted">${queue.length - 1} after this one</span></div>
@@ -1592,8 +1605,8 @@ function stepBody(s, c) {
         <button class="link" type="button" data-editpoints>Edit talking points</button><div hidden data-pointsedit>${body("Talking points", "short", "What to say or ask")}</div>`
         : `<button class="link" type="button" data-editpoints>Add talking points</button><div hidden data-pointsedit>${body("Talking points", "short", "What to say or ask")}</div>`}
       <div class="lbl" id="${id("out")}">What happened?</div>
-      <div class="chips" role="group" aria-labelledby="${id("out")}">${CALL_LOG.map(([v, l]) =>
-        `<button class="chip" type="button" data-outcome="${v}" aria-pressed="false">${l}</button>`).join("")}</div>
+      ${outcomeChips(`aria-labelledby="${id("out")}"`, (v, l) =>
+        `<button class="chip${NO_OUT.includes(v) ? " no" : ""}" type="button" data-outcome="${v}" aria-pressed="false"${OUT_TIP[v] ? ` title="${esc(OUT_TIP[v])}"` : ""}>${l}</button>`)}
       ${lab("note", "Note (optional)")}<input id="${id("note")}" data-s="note" placeholder="Wants a demo Tuesday" enterkeyhint="done">`;
     actions = `<button class="btn primary" data-act="logcall" type="button" disabled>Log call</button><span class="muted pickfirst">Pick what happened first</span>`;
   } else if (s.type === "text") {
@@ -2000,10 +2013,10 @@ document.addEventListener("click", async e => {
   }
 });
 document.addEventListener("input", e => { if (e.target.id === "callNote") state.pickNote = e.target.value; });
-// keys 1 to 8 pick a call outcome on the calling card, then Enter logs it (not while typing or with the panel open)
+// keys 1 to 9 and 0 pick a call outcome on the calling card, then Enter logs it (not while typing or with the panel open)
 document.addEventListener("keydown", e => {
-  if (e.metaKey || e.ctrlKey || e.altKey || typing() || document.activeElement?.matches("input, select, textarea") || $("#drawer").classList.contains("open") || !/^[1-8]$/.test(e.key)) return;
-  const chip = document.querySelectorAll(".now [data-pick]")[Number(e.key) - 1];
+  if (e.metaKey || e.ctrlKey || e.altKey || typing() || document.activeElement?.matches("input, select, textarea") || $("#drawer").classList.contains("open") || !/^[0-9]$/.test(e.key)) return;
+  const chip = document.querySelector(`.now [data-pick][data-hk="${e.key}"]`);
   if (chip) { e.preventDefault(); chip.click(); }
 });
 document.addEventListener("change", e => {
