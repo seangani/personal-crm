@@ -229,7 +229,7 @@ a.place.site { color: var(--accent); text-decoration: none; } a.place.site:hover
 .crow .cm span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crow .pill { font-size: var(--text-xs); }
 .clist .empty { padding: 16px; }
-.thread { min-width: 0; }
+.thread { min-width: 0; } .thread[aria-busy="true"] { opacity: 0.55; }
 .thead { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; margin-bottom: 16px; }
 .thead h2 { margin: 0; } .thead .link { font-size: var(--text-sm); }
 .tlist { display: flex; flex-direction: column; gap: 12px; }
@@ -867,27 +867,46 @@ function pinnedStep(c) {
     <div class="row">${quick ? `<button class="btn sm primary" type="button" data-cdone="${s.id}">${["email", "text", "linkedin"].includes(s.type) ? "Mark sent" : "Mark done"}</button>` : ""}
       <button class="btn sm${quick ? "" : " primary"}" type="button" data-email="${c.id}" data-sid="${s.id}">${s.type === "call" ? "Log the call" : "Open or edit"}</button></div></div>`;
 }
+// the list and the thread scroll on their own (Sean, 11/20): picking a name swaps only the thread, and refreshes
+// repaint in place, so the list keeps its scroll and the page doesn't jump
+function paintConvo(people, thread) {
+  const list = people.map(convoRow).join("") || `<div class="empty">No warm leads right now.</div>`;
+  const count = `${people.length} ${people.length === 1 ? "person" : "people"}`;
+  const key = list.replace(/ aria-current="(true|false)"/g, "");
+  const cl = $("#main .clist"), th = $("#thread"), y = window.scrollY;
+  if (cl && th) {
+    // only the highlight changed: set it on the rows in place, so the clicked button keeps focus
+    if (state.convoList !== key) { const top = cl.scrollTop; cl.innerHTML = list; cl.scrollTop = top; }
+    else cl.querySelectorAll("[data-convo]").forEach(r => r.setAttribute("aria-current", String(Number(r.dataset.convo) === state.convo)));
+    th.innerHTML = thread; th.removeAttribute("aria-busy"); $("#main .convocount").textContent = count;
+  } else {
+    $("#main").innerHTML = `<div class="section"><div class="head"><h2>Conversations</h2><div class="grow"></div><span class="count convocount">${count}</span></div>
+    <p class="muted note">Warm leads, plus anyone in Not now or marked Priority FOCUS or HOT. Everything you and each of them said, oldest first, with the next step pinned at the bottom.</p>
+    <div class="convo"><div class="clist" role="region" aria-label="Warm leads">${list}</div>
+    <div class="thread" id="thread">${thread}</div></div></div>`;
+  }
+  state.convoList = key;
+  window.scrollTo(0, y);
+}
 async function renderConvo() {
   const people = convoPeople();
   if (!people.some(c => c.id === state.convo)) state.convo = people[0]?.id || null;
-  const list = people.map(convoRow).join("");
-  const shell = (thread) => `<div class="section"><div class="head"><h2>Conversations</h2><div class="grow"></div><span class="count">${people.length} ${people.length === 1 ? "person" : "people"}</span></div>
-    <p class="muted note">Warm leads, plus anyone in Not now or marked Priority FOCUS or HOT. Everything you and each of them said, oldest first, with the next step pinned at the bottom.</p>
-    <div class="convo"><div class="clist" role="region" aria-label="Warm leads">${list || `<div class="empty">No warm leads right now.</div>`}</div>
-    <div class="thread" id="thread">${thread}</div></div></div>`;
-  if (!state.convo) { $("#main").innerHTML = shell(""); return; }
+  if (!state.convo) return paintConvo(people, "");
   const want = state.convo;
-  let c = state.convoCache?.id === want ? state.convoCache : null;
-  if (!c) { $("#main").innerHTML = shell(`<div class="empty">Loading...</div>`); }
+  const cached = state.convoCache?.id === want ? state.convoCache : null;
+  // while the next thread loads, the current one stays (dimmed): swapping in a short "Loading" box shrank the page
+  // and the browser pulled the scroll up
+  const shown = $("#thread .thead");
+  if (!cached && !shown) paintConvo(people, `<div class="empty">Loading...</div>`);
+  else if (!cached) $("#thread").setAttribute("aria-busy", "true");
+  let c;
   try { c = await api(`/api/contacts/${want}`); } catch (e) { return; }
   if (state.view !== "convo" || state.convo !== want) return;
   state.convoCache = c;
   const items = [...c.touches].reverse().map(convoItem).join("");
-  const y = window.scrollY;
-  $("#main").innerHTML = shell(`<div class="thead"><h2>${esc(c.person || c.company)}</h2>${c.person ? `<span class="muted">${esc(c.company)}</span>` : ""}${stagePill(c)}
+  paintConvo(convoPeople(), `<div class="thead"><h2>${esc(c.person || c.company)}</h2>${c.person ? `<span class="muted">${esc(c.company)}</span>` : ""}${stagePill(c)}
       <button class="link" type="button" data-open="${c.id}">Open profile</button></div>
     <div class="tlist${warmTint(c) ? " warmth" : ""}">${items || `<div class="empty">Nothing logged yet.</div>`}</div>${pinnedStep(c)}`);
-  window.scrollTo(0, y);
 }
 
 // ---- history: every change to a person, who made it, and undo -------------------------------------------
@@ -1923,7 +1942,11 @@ document.addEventListener("click", async e => {
     toast(`Put back ${r.people.length} ${r.people.length === 1 ? "person" : "people"}`); await load(); return;
   }
   const cv = e.target.closest("[data-convo]");
-  if (cv) { state.convo = Number(cv.dataset.convo); state.convoOpen = new Set(); window.scrollTo(0, 0); return renderConvo(); }
+  if (cv) {  // highlight the row where it is, then swap the thread; nothing else moves
+    state.convo = Number(cv.dataset.convo); state.convoOpen = new Set();
+    document.querySelectorAll(".clist [data-convo]").forEach(r => r.setAttribute("aria-current", String(r === cv)));
+    return renderConvo();
+  }
   const cx = e.target.closest("[data-cexp]");
   if (cx) {  // open or close one email in place (Conversations tab and the person panel)
     const n = Number(cx.dataset.cexp), open = !state.convoOpen.has(n), mb = cx.previousElementSibling;
